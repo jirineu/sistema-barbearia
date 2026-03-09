@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BarberPro Mobile</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="mobile-header">
+        <h1>Barber<span>Pro</span></h1>
+    </header>
+
+    <main class="container-mobile">
+<section id="view-dash" class="view-section">
+    <div style="display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 10px;">
+        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('dia')">Dia</button>
+        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('semana')">Semana</button>
+        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('mes')">Mês</button>
+        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('ano')">Ano</button>
+        <button class="btn-small" onclick="app.atualizarDashPorPeriodo('tudo')">Tudo</button>
+    </div>
+
+    <div class="stats-grid">
+        <div class="card-stat">
+            <h4>Bruto (<span id="dash-periodo-txt">Mês</span>)</h4>
+            <p id="dash-bruto">R$ 0,00</p>
+        </div>
+        <div class="card-stat" style="border-left-color: var(--success);">
+            <h4>Líquido Casa</h4>
+            <p id="dash-liquido">R$ 0,00</p>
+        </div>
+    </div>
+
+    <div class="lista-box" style="background: var(--card); padding: 15px; border-radius: 15px;">
+        <h4 style="font-size: 11px; color: var(--accent); margin-bottom: 15px; text-transform: uppercase;">Recordes do Período</h4>
+        
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
+            <span style="color:#888; font-size: 13px;">Total de Cortes:</span>
+            <strong id="dash-cortes-total">0</strong>
+        </div>
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
+            <span style="color:#888; font-size: 13px;">Barbeiro + Usado:</span>
+            <strong id="dash-barbeiro-top">-</strong>
+        </div>
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
+            <span id="label-cliente-periodo" style="color:#888; font-size: 13px;">Cliente do Período:</span>
+            <strong id="dash-cliente-top">-</strong>
+        </div>
+
+        <h4 style="font-size: 11px; color: var(--success); margin: 20px 0 10px 0; text-transform: uppercase; border-top: 1px solid #333; padding-top: 15px;">Recorde Histórico (Permanente)</h4>
+        <div style="display: flex; justify-content: space-between;">
+            <span style="color:#888; font-size: 13px;">🏆 Melhor Cliente de Sempre:</span>
+            <strong id="dash-cliente-permanente" style="color: var(--accent)">-</strong>
+        </div>
+    </div>
+</section>
+   <section id="view-agenda" class="view-section" style="display:none">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+        <h3 style="margin:0">Agenda Geral</h3>
+        <div style="display:flex; gap:5px">
+            <button class="btn-small" onclick="app.renderView('add-agenda')" style="background:var(--accent); color:black; font-weight:bold">+ Novo</button>
+            <button class="btn-small" style="background:#333; color:white" onclick="app.renderView('historico')">📜 Histórico</button>
+            <button class="btn-small" style="background:#333; color:white" onclick="app.compartilharLink()">🔗 Link</button>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 15px;">
+        <input type="text" placeholder="🔍 Buscar por cliente ou barbeiro..." 
+               oninput="app.filtrarLista('agenda', this.value)" 
+               style="width: 100%; padding: 12px; border-radius: 8px; background: #1a1a1a; color: white; border: 1px solid #333;">
+    </div>
+
+    <div class="lista-box" id="lista-agenda-content"></div>
+</section>
+        <section id="view-historico" class="view-section" style="display:none">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                <h3>Histórico / Gestão</h3>
+                <button class="btn-small" style="background:#333; color:white" onclick="app.renderView('agenda')">Voltar</button>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px;">
+                <button class="btn-small" onclick="app.setFiltroRapido('hoje')">Hoje</button>
+                <button class="btn-small" onclick="app.setFiltroRapido('mes')">Mês</button>
+                <button class="btn-small" style="background:#444; color:#fff" onclick="app.setFiltroRapido('limpar')">Limpar</button>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px">
+                <div>
+                    <label style="font-size:10px; color:#888">Data:</label>
+                    <input type="date" id="filtro-data-hist" onchange="app.filtrarHistorico()">
+                </div>
+                <div>
+                    <label style="font-size:10px; color:#888">Mês:</label>
+                    <input type="month" id="filtro-mes-hist" onchange="app.filtrarHistorico()">
+                </div>
+            </div>
+            <div id="lista-historico-content" class="lista-box"></div>
+        </section>
+
+        <section id="view-prestadores" class="view-section" style="display:none">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <h3>Equipe</h3>
+                <button class="btn-small" onclick="app.prepararEdicaoPrestador()">+ Novo</button>
+            </div><br>
+            <div id="lista-pre"></div>
+        </section>
+
+        <section id="view-estoque" class="view-section" style="display:none">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <h3>Estoque</h3>
+                <button class="btn-small" onclick="app.prepararEdicaoEstoque()">+ Item</button>
+            </div><br>
+            <input type="text" placeholder="🔍 Pesquisar no estoque..." oninput="app.filtrarLista('estoque', this.value)" style="margin-bottom:15px">
+            <div class="lista-box" id="lista-estoque-content"></div>
+        </section>
+
+        <section id="view-servicos" class="view-section" style="display:none">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <h3>Serviços</h3>
+                <button class="btn-small" onclick="app.prepararEdicaoServico()">+ Novo</button>
+            </div><br>
+            <input type="text" placeholder="🔍 Pesquisar serviço..." oninput="app.filtrarLista('servicos', this.value)" style="margin-bottom:15px">
+            <div class="lista-box" id="lista-servicos-content"></div>
+        </section>
+    </main>
+
+    <nav class="tab-bar">
+        <button class="tab-item active" onclick="app.renderView('dash', this)"><i>🏠</i><span>Início</span></button>
+        <button class="tab-item" onclick="app.renderView('agenda', this)"><i>📅</i><span>Agenda</span></button>
+        <button class="tab-item" onclick="app.renderView('servicos', this)"><i>✂️</i><span>Serviços</span></button> 
+        <button class="tab-item" onclick="app.renderView('prestadores', this)"><i>👥</i><span>Equipe</span></button>
+        <button class="tab-item" onclick="app.renderView('estoque', this)"><i>📦</i><span>Estoque</span></button>
+    </nav>
+
+    <div id="modal-container" class="modal-overlay">
+        <div class="bottom-sheet" id="modal-content"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
