@@ -1252,4 +1252,18 @@ window.onload = () => {
         }
     }, 200); // 200ms é o tempo de segurança ideal
 }
+
+};
+
+window.onload = function() {
+    const user = localStorage.getItem('gh_user');
+    const token = localStorage.getItem('gh_token');
+
+    // Se não houver usuário ou token salvos, abre o login na hora
+    if (!user || !token) {
+        setTimeout(() => {
+            alert("Bem-vindo! Vamos configurar sua nuvem para não perder os dados.");
+            configurarCloud();
+        }, 1000); // Espera 1 segundo para o app carregar
+    }
 };
