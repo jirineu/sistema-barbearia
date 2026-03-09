@@ -8,9 +8,33 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <header class="mobile-header">
-        <h1>Barber<span>Pro</span></h1>
-    </header>
+<div id="auth-screen" style="display: none; width: 100%; max-width: 400px; margin: 10vh auto; text-align: center; padding: 20px;">
+    <div class="card" style="background: #1e293b; padding: 30px; border-radius: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); font-family: sans-serif;">
+        <h2 style="color: #f8fafc; margin-bottom: 10px;">BarberPro Cloud ☁️</h2>
+        <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 25px;">Acesse sua barbearia de qualquer lugar</p>
+        
+        <input type="text" id="u-user" value="jirineu" style="display: none;">
+
+        <div style="text-align: left; margin-bottom: 15px;">
+            <label style="color: #cbd5e1; font-size: 0.8rem; margin-left: 5px;">Seu Identificador (Nome):</label>
+            <input type="text" id="display-name" placeholder="Ex: Barbearia do João" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #334155; background: #0f172a; color: white; margin-top: 5px;">
+        </div>
+
+        <div style="text-align: left; margin-bottom: 20px;">
+            <label style="color: #cbd5e1; font-size: 0.8rem; margin-left: 5px;">Chave de Acesso (Token):</label>
+            <input type="password" id="u-token" placeholder="Cole seu Token aqui" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #334155; background: #0f172a; color: white; margin-top: 5px;">
+        </div>
+        
+        <button onclick="configurarCloud()" style="width: 100%; background: #D4AF37; color: #1e293b; border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer;">
+            Entrar e Sincronizar
+        </button>
+    </div>
+</div>
+    <div id="main-app" style="display: none;">
+        <header class="mobile-header">
+            <span>Barber<span>Pro</span></span>
+            <button onclick="localStorage.clear(); location.reload();" style="position: absolute; right: 10px; background: none; border: none; color: #ef4444; font-size: 0.7rem;">Sair</button>
+        </header>
 
     <main class="container-mobile">
 <section id="view-dash" class="view-section">
