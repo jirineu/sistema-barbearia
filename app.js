@@ -13,20 +13,36 @@ const app = {
     
 
 persistir() {
-    // 1. Salva local imediatamente
-    localStorage.setItem('barber_data', JSON.stringify(this.dados));
+    // 1. Busca quem é o usuário ativo no Local Storage
+    const userAtivo = localStorage.getItem('barber_current_user');
+    
+    // Se não houver usuário logado, não persiste nada
+    if (!userAtivo) return;
 
-    // 2. Cancela o salvamento anterior se um novo começar rápido demais
+    // 2. Salva localmente em um slot exclusivo para este usuário
+    // Ex: barber_data_joao, barber_data_maria
+    localStorage.setItem(`barber_data_${userAtivo}`, JSON.stringify(this.dados));
+
+    // 3. Cancela o agendamento de salvamento anterior
     if (this.timerSalvar) clearTimeout(this.timerSalvar);
 
-    // 3. Espera 2 segundos de "paz" para enviar para o GitHub
+    // 4. Aguarda 2 segundos de inatividade para enviar à nuvem
     this.timerSalvar = setTimeout(() => {
-        if (githubDB.token && githubDB.owner) {
-            githubDB.salvar(this.dados).then(sucesso => {
-                if (sucesso) console.log("☁️ Backup Cloud OK");
-            });
+        // O githubDB.creds agora já busca automaticamente o token e o file do userAtivo
+        if (githubDB.creds) {
+            githubDB.salvar(this.dados)
+                .then(sucesso => {
+                    if (sucesso) {
+                        console.log(`☁️ Backup Cloud OK para: ${userAtivo}`);
+                    } else {
+                        console.warn("⚠️ Falha ao sincronizar (Token expirado ou erro de SHA)");
+                    }
+                })
+                .catch(err => {
+                    console.error("❌ Erro crítico na sincronização:", err);
+                });
         }
-    }, 2000); 
+    }, 2000);
 },
     renderView(view, btn) {
         if (view === 'add-agenda') {
@@ -1069,201 +1085,226 @@ compartilharLink() {
         alert("Não foi possível gerar o link. Verifique se os dados estão corretos.");
     }
 },
-};
+}
 
 
 const githubDB = {
-    token: '',
-    owner: '',
-    repo: 'dados-barbearia', // Nome do repositório
-    path: 'banco.json',      // Nome do arquivo de dados
+    owner: "jirineu",
+    repo: "dados-barbearia",
 
-    async salvar(dados) {
-        const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${this.path}`;
-        
-        // 1. Precisamos do 'sha' (identificador) do arquivo se ele já existir
-        let sha = '';
-        try {
-            const res = await fetch(url, {
-                headers: { 'Authorization': `token ${this.token}` }
-            });
-            if (res.ok) {
-                const json = await res.json();
-                sha = json.sha;
-            }
-        } catch (e) { console.log("Arquivo novo, sem SHA."); }
-
-        // 2. Converter dados para Base64 (exigência do GitHub)
-        const content = btoa(unescape(encodeURIComponent(JSON.stringify(dados, null, 2))));
-
-        // 3. Enviar para o GitHub
-        const response = await fetch(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `token ${this.token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                message: "Atualizando banco de dados",
-                content: content,
-                sha: sha || undefined
-            })
-        });
-
-        return response.ok;
+    get creds() {
+        const user = localStorage.getItem('barber_current_user');
+        if (!user) return null;
+        const config = localStorage.getItem(`barber_auth_${user}`);
+        return config ? JSON.parse(config) : null;
     },
 
     async carregar() {
-        const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${this.path}`;
-        const res = await fetch(url, {
-            headers: { 'Authorization': `token ${this.token}` }
-        });
+        const c = this.creds;
+        if (!c) return null;
 
-        if (res.ok) {
-            const json = await res.json();
-            const content = decodeURIComponent(escape(atob(json.content)));
-            return JSON.parse(content);
-        }
-        return null;
+        const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${c.file}?t=${Date.now()}`;
+        
+        try {
+            const res = await fetch(url, {
+                headers: { 
+                    'Authorization': `token ${c.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+
+            if (res.status === 404) return null;
+
+            const data = await res.json();
+            // Salva o SHA vinculado ao NOME DO ARQUIVO específico
+            localStorage.setItem(`sha_${c.file}`, data.sha);
+            return JSON.parse(decodeURIComponent(escape(atob(data.content))));
+        } catch (e) { return null; }
+    },
+
+    async salvar(dados) {
+        const c = this.creds;
+        if (!c) return false;
+
+        const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${c.file}`;
+        // Busca o SHA que pertence apenas a este arquivo
+        const currentSha = localStorage.getItem(`sha_${c.file}`);
+
+        const corpo = {
+            message: `Sincronia: ${c.userName}`,
+            content: btoa(unescape(encodeURIComponent(JSON.stringify(dados, null, 2))))
+        };
+
+        // Se o arquivo já existe no GitHub, o SHA é obrigatório para evitar o erro 422
+        if (currentSha) corpo.sha = currentSha;
+
+        try {
+            const res = await fetch(url, {
+                method: 'PUT',
+                headers: { 
+                    'Authorization': `token ${c.token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(corpo)
+            });
+
+            if (res.ok) {
+                const resData = await res.json();
+                localStorage.setItem(`sha_${c.file}`, resData.content.sha);
+                return true;
+            }
+            return false;
+        } catch (e) { return false; }
     }
 };
+// --- 2. FUNÇÕES DE SUPORTE ---
+// Garante que as credenciais sejam salvas e o app inicializado
+async function configurarCloud() {
+    const userInput = document.getElementById('u-user').value.trim().toLowerCase();
+    const tokenInput = document.getElementById('u-token').value.trim();
 
-const ghUserSalvo = localStorage.getItem('gh_user');
-const ghTokenSalvo = localStorage.getItem('gh_token');
+    if (!userInput || !tokenInput) return alert("Preencha Usuário e Token.");
 
-if (ghUserSalvo && ghTokenSalvo) {
-    githubDB.owner = ghUserSalvo;
-    githubDB.token = ghTokenSalvo;
-    console.log("☁️ GitHub Cloud: Credenciais carregadas do navegador.");
-}
+    // Gera o nome do arquivo baseado no que o cliente digitou na caixa de texto
+    const fileHash = btoa(userInput).replace(/=/g, "").substring(0, 10);
+    const fileName = `db_${fileHash}.json`;
 
-function configurarCloud() {
-    const user = prompt("Digite seu usuário do GitHub:");
-    const token = prompt("Cole seu Token do GitHub:");
+    // Define o contexto do novo usuário
+    localStorage.setItem('barber_current_user', userInput);
+    localStorage.setItem(`barber_auth_${userInput}`, JSON.stringify({
+        token: tokenInput, file: fileName, userName: userInput
+    }));
 
-    if (user && token) {
-        githubDB.owner = user;
-        githubDB.token = token;
+    try {
+        // Tenta carregar para ver se o arquivo já existe para esse nome
+        const dadosNuvem = await githubDB.carregar();
         
-        // Salva as credenciais localmente para não pedir sempre
-        localStorage.setItem('gh_user', user);
-        localStorage.setItem('gh_token', token);
-        
-        alert("Cloud configurada! Sincronizando...");
-        sincronizarComGithub();
+        if (dadosNuvem) {
+            app.dados = dadosNuvem;
+            alert(`Bem-vindo de volta, ${userInput}!`);
+        } else {
+            // É UM USUÁRIO NOVO: Resetamos os dados na memória
+            app.dados = { 
+                usuario: userInput, 
+                caixa: 0, agenda: [], historico: [], prestadores: [], estoque: [], servicos: [],
+                config: { inicioDia: 8, fimDia: 19, intervalo: 30 }
+            };
+
+            // CRIAÇÃO FÍSICA: Faz o post para criar o arquivo .json no GitHub
+            const sucessoAoCriar = await githubDB.salvar(app.dados);
+            if (!sucessoAoCriar) throw new Error("Erro ao criar arquivo no repositório.");
+            
+            alert(`Banco de dados criado para: ${userInput}`);
+        }
+
+        // Salva backup local e entra
+        localStorage.setItem(`barber_data_${userInput}`, JSON.stringify(app.dados));
+        window.location.reload(); 
+
+    } catch (e) {
+        alert("Falha: " + e.message);
     }
 }
-
+// Verifique se a função de sincronização inicial existe
 async function sincronizarComGithub() {
-    console.log("Buscando dados no GitHub...");
+    if (!githubDB.token || !githubDB.path) return false;
     
+    try {
+        const dadosNuvem = await githubDB.carregar();
+        
+        if (dadosNuvem) {
+            app.dados = dadosNuvem;
+
+            // LÓGICA DE CRIAÇÃO: Se carregou mas não tem SHA, o arquivo não existe no GitHub.
+            // Precisamos salvar uma vez para "criar" o arquivo fisicamente.
+            if (!githubDB.sha) {
+                console.log("Arquivo novo detectado. Criando banco no GitHub...");
+                const criado = await githubDB.salvar(app.dados);
+                if (criado) console.log("✅ Banco de dados criado com sucesso!");
+            }
+            
+            return true;
+        }
+    } catch (e) {
+        console.error("Erro ao sincronizar com a nuvem", e);
+    }
+    return false;
+}
+// --- 3. INICIALIZAÇÃO ÚNICA DO SISTEMA ---
+window.onload = async () => {
+    // 1. Descobre quem é o usuário selecionado neste dispositivo
+    const userAtivo = localStorage.getItem('barber_current_user');
+    const authScreen = document.getElementById('auth-screen');
+    const mainApp = document.getElementById('main-app');
+
+    // Se não tiver usuário ativo, mostra a tela de login
+    if (!userAtivo) {
+        if (authScreen) authScreen.style.display = 'flex';
+        if (mainApp) mainApp.style.display = 'none';
+        return;
+    }
+
+    // Se tem usuário, libera o app
+    if (authScreen) authScreen.style.display = 'none';
+    if (mainApp) mainApp.style.display = 'block';
+
+    // 2. Tenta carregar os dados da nuvem 
+    // O githubDB.carregar() agora já sabe buscar barber_auth_USUARIO internamente
     const dadosNuvem = await githubDB.carregar();
     
     if (dadosNuvem) {
-        // Pergunta se deseja sobrescrever os dados locais (opcional, para segurança)
-        if (confirm("Dados encontrados na nuvem! Deseja carregar e substituir os dados atuais deste aparelho?")) {
-            app.dados = dadosNuvem;
-            localStorage.setItem('barber_data', JSON.stringify(app.dados));
-            app.renderView('dash');
-            alert("Sincronização concluída!");
-        }
-    } else {
-        // Se não houver arquivo lá, enviamos o local pela primeira vez
-        console.log("Nenhum dado encontrado na nuvem. Criando banco inicial...");
-        app.persistir(); 
-    }
-}
-window.onload = () => {
-    // 1. Carregar dados do LocalStorage (Navegador)
-    try {
-        const dadosSalvos = localStorage.getItem('barber_data');
-        if (dadosSalvos) {
-            app.dados = JSON.parse(dadosSalvos);
-        }
-    } catch (e) { 
-        console.error("Erro ao carregar storage"); 
-    }
-
-    // Garantia de estrutura mínima para evitar erros de "undefined"
-    if (!app.dados) app.dados = {};
-    if (!app.dados.servicos) app.dados.servicos = [];
-    if (!app.dados.prestadores) app.dados.prestadores = [];
-    if (!app.dados.agenda) app.dados.agenda = [];
-    if (!app.dados.historico) app.dados.historico = [];
-    if (!app.dados.estoque) app.dados.estoque = [];
-    if (!app.dados.logsAcertos) app.dados.logsAcertos = [];
-    if (!app.dados.caixa) app.dados.caixa = 0;
-
-    const params = new URLSearchParams(window.location.search);
-    
-    // 2. Importar dados da URL (Protegido contra sobrescrita)
-    if (params.has('data')) {
-        try {
-            const token = params.get('data');
-            const json = decodeURIComponent(escape(atob(token)));
-            const importados = JSON.parse(json);
-            
-            if (app.dados.servicos.length === 0 && importados.s) app.dados.servicos = importados.s;
-            if (app.dados.prestadores.length === 0 && importados.p) app.dados.prestadores = importados.p;
-            
-            app.persistir(); 
-        } catch (e) { 
-            console.error("Erro na importação de dados externos"); 
-        }
-    }
-
-    // 3. Lógica para o Link de Agendamento (Visão do Cliente)
-    if (params.has('agendar')) {
-        app.renderView('dash'); 
+        app.dados = dadosNuvem;
         
-        const seletoresParaEsconder = ['.tab-bar', '.mobile-header', '#view-dash', '#view-agenda', '#view-equipe', '#view-servicos', '.admin-only'];
-        seletoresParaEsconder.forEach(sel => {
-            const el = document.querySelector(sel);
-            if (el) el.style.display = 'none';
-        });
-
-        document.body.style.background = "#000";
-
-        if (typeof app.prepararNovoAgendamento === 'function') {
-            app.prepararNovoAgendamento();
+        // Se o arquivo acabou de ser criado (sem SHA no carregamento), força o primeiro push
+        const currentConfig = githubDB.creds;
+        const currentSha = localStorage.getItem(`sha_${currentConfig?.file}`);
+        
+        if (!currentSha) {
+            console.log("Criando arquivo físico inicial para:", userAtivo);
+            await githubDB.salvar(app.dados);
         }
-
-        const fecharOriginal = app.fecharModal;
-        app.fecharModal = () => {
-            fecharOriginal.call(app);
-            document.body.innerHTML = `
-                <div style="height:100vh; background:#111; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; font-family:sans-serif; text-align:center; padding:20px;">
-                    <div style="font-size: 50px; margin-bottom: 20px;">📅</div>
-                    <h2 style="color:var(--accent)">Agendamento encerrado.</h2>
-                    <p style="color:#666; margin-top:10px">Para realizar um novo agendamento, clique no botão abaixo.</p>
-                    <button onclick="window.location.reload()" style="margin-top:20px; padding:15px 30px; background:#D4AF37; border:none; border-radius:10px; font-weight:bold; cursor:pointer; color:black; text-transform:uppercase;">Novo Agendamento</button>
-                </div>`;
-        };
-
     } else {
-    // 1. Renderiza a estrutura da view
-    app.renderView('dash');
-    
-    // 2. Aguarda o DOM e aplica os dados
-    setTimeout(() => {
-        if (typeof app.atualizarDashPorPeriodo === 'function') {
-            // Isso vai disparar a atualizarInterfaceDash com os cálculos
-            app.atualizarDashPorPeriodo('mes'); 
+        // 3. Se falhar a nuvem, busca o backup local ESPECÍFICO deste usuário
+        const local = localStorage.getItem(`barber_data_${userAtivo}`);
+        if (local) {
+            app.dados = JSON.parse(local);
         }
-    }, 200); // 200ms é o tempo de segurança ideal
-}
+    }
 
-};
+    // 4. Garante estrutura mínima e o nome do usuário correto nos dados
+    const padrao = { 
+        usuario: userAtivo, 
+        servicos: [], prestadores: [], agenda: [], estoque: [], caixa: 0, historico: [] 
+    };
+    app.dados = { ...padrao, ...app.dados };
 
-window.onload = function() {
-    const user = localStorage.getItem('gh_user');
-    const token = localStorage.getItem('gh_token');
+    // 5. Renderiza a visão inicial
+    app.renderView('dash');
 
-    // Se não houver usuário ou token salvos, abre o login na hora
-    if (!user || !token) {
+    // Lógica de agendamento ou Dashboard
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('agendar')) {
+        const esconder = ['.tab-bar', '.mobile-header', '#view-dash', '.admin-only'];
+        esconder.forEach(s => { 
+            const el = document.querySelector(s); 
+            if (el) el.style.display = 'none'; 
+        });
+        document.body.style.background = "#000";
+        if (app.prepararNovoAgendamento) app.prepararNovoAgendamento();
+    } else {
         setTimeout(() => {
-            alert("Bem-vindo! Vamos configurar sua nuvem para não perder os dados.");
-            configurarCloud();
-        }, 1000); // Espera 1 segundo para o app carregar
+            if (app.atualizarDashPorPeriodo) app.atualizarDashPorPeriodo('mes');
+        }, 300);
     }
 };
+function trocarUsuario(novoUsuario) {
+    // Apenas muda o ponteiro do usuário ativo
+    localStorage.setItem('barber_current_user', novoUsuario);
+    location.reload();
+}
+
+function logout() {
+    // Sai da conta atual mas mantém os dados salvos no dispositivo
+    localStorage.removeItem('barber_current_user');
+    location.reload();
+}
