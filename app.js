@@ -30,7 +30,7 @@ persistir() {
                 console.warn("⚠️ Falha na sincronização. Tentará novamente na próxima alteração.");
             }
         }
-    }, 1000);
+    }, 500);
 },
     renderView(view, btn) {
         if (view === 'add-agenda') {
@@ -1330,4 +1330,5 @@ function logout() {
         location.reload();
     }
 }
+
 
