@@ -13,34 +13,22 @@ const app = {
     
 
 persistir() {
-    // 1. Busca quem é o usuário ativo no Local Storage
-    const userAtivo = localStorage.getItem('barber_current_user');
-    
-    // Se não houver usuário logado, não persiste nada
-    if (!userAtivo) return;
+    // 1. Salva sempre no LocalStorage para garantir rapidez e funcionamento offline
+    localStorage.setItem('barber_local_db', JSON.stringify(this.dados));
 
-    // 2. Salva localmente em um slot exclusivo para este usuário
-    // Ex: barber_data_joao, barber_data_maria
-    localStorage.setItem(`barber_data_${userAtivo}`, JSON.stringify(this.dados));
-
-    // 3. Cancela o agendamento de salvamento anterior
+    // 2. Cancela qualquer agendamento de salvamento pendente (debounce)
     if (this.timerSalvar) clearTimeout(this.timerSalvar);
 
-    // 4. Aguarda 2 segundos de inatividade para enviar à nuvem
-    this.timerSalvar = setTimeout(() => {
-        // O githubDB.creds agora já busca automaticamente o token e o file do userAtivo
+    // 3. Agenda o envio para o GitHub após 2 segundos de inatividade
+    this.timerSalvar = setTimeout(async () => {
         if (githubDB.creds) {
-            githubDB.salvar(this.dados)
-                .then(sucesso => {
-                    if (sucesso) {
-                        console.log(`☁️ Backup Cloud OK para: ${userAtivo}`);
-                    } else {
-                        console.warn("⚠️ Falha ao sincronizar (Token expirado ou erro de SHA)");
-                    }
-                })
-                .catch(err => {
-                    console.error("❌ Erro crítico na sincronização:", err);
-                });
+            console.log("☁️ Tentando sincronizar com GitHub...");
+            const sucesso = await githubDB.salvar(this.dados);
+            if (sucesso) {
+                console.log("✅ Sincronizado com sucesso!");
+            } else {
+                console.warn("⚠️ Falha na sincronização. Tentará novamente na próxima alteração.");
+            }
         }
     }, 2000);
 },
@@ -287,56 +275,75 @@ prepararNovoAgendamento() {
     const optPrestadores = this.dados.prestadores.map(p => `<option value="${p.nome}">${p.nome}</option>`).join('');
     const optServicos = this.dados.servicos.map(s => `<option value="${s.nome}" data-preco="${s.valor}">${s.nome} - R$ ${s.valor}</option>`).join('');
     
-    // GARANTINDO QUE PUXA PREÇO E NOME DO ESTOQUE REAL
-   const optProdutos = (this.dados.estoque || []).map(p => {
-    // Tenta encontrar o preço em qualquer variação comum de nome
-    // Verifique se no seu cadastro você usou: valorVenda, valor, ou preco_venda
-    const precoItem = parseFloat(p.precoVenda || p.preco || p.valor || p.valorVenda || 0);
-    
-    // Pega a quantidade disponível
-    const qtd = p.quantidade || p.qtd || 0;
+    const optProdutos = (this.dados.estoque || []).map(p => {
+        const precoItem = parseFloat(p.precoVenda || p.preco || p.valor || p.valorVenda || 0);
+        const qtd = p.quantidade || p.qtd || 0;
+        return `<option value="${p.nome}" data-preco="${precoItem}">${p.nome} - R$ ${precoItem.toFixed(2)} (${qtd} un)</option>`;
+    }).join('');
 
-    return `<option value="${p.nome}" data-preco="${precoItem}">${p.nome} - R$ ${precoItem.toFixed(2)} (${qtd} un)</option>`;
-}).join('');
     const hoje = new Date().toISOString().split('T')[0];
+    
+    // Verifica se é cliente acessando pelo link
+    const params = new URLSearchParams(window.location.search);
+    const ehExterno = params.has('agendar');
 
     const html = `
-        <input type="text" id="ag-nome" placeholder="Nome do Cliente">
-        <label style="font-size:12px; color:#888; display:block; margin-top:10px">Data:</label>
-        <input type="date" id="ag-data" value="${hoje}">
-        
-        <label style="font-size:12px; color:#888; display:block; margin-top:10px">Barbeiro:</label>
-        <select id="ag-prestador-select" onchange="app.atualizarHorariosDisponiveis()">
-            <option value="">Selecione...</option>
-            ${optPrestadores}
-        </select>
-        
-        <label style="font-size:12px; color:#888; display:block; margin-top:10px">Serviço:</label>
-        <select id="ag-servico-select" onchange="app.atualizarTotalAgendamento()">
-            <option value="">Selecione o serviço...</option>
-            ${optServicos}
-        </select>
+        <div class="${ehExterno ? 'agendar-mode-form' : ''}">
+            <input type="text" id="ag-nome" placeholder="Nome do Cliente">
+            
+            <label style="font-size:12px; color:#888; display:block; margin-top:10px">Data:</label>
+            <input type="date" id="ag-data" value="${hoje}">
+            
+            <label style="font-size:12px; color:#888; display:block; margin-top:10px">Barbeiro:</label>
+            <select id="ag-prestador-select" onchange="app.atualizarHorariosDisponiveis()">
+                <option value="">Selecione...</option>
+                ${optPrestadores}
+            </select>
+            
+            <label style="font-size:12px; color:#888; display:block; margin-top:10px">Serviço:</label>
+            <select id="ag-servico-select" onchange="app.atualizarTotalAgendamento()">
+                <option value="">Selecione o serviço...</option>
+                ${optServicos}
+            </select>
 
-        <label style="font-size:12px; color:#888; display:block; margin-top:10px">Adicionar Produto (Estoque):</label>
-        <select id="ag-produto-select" onchange="app.atualizarTotalAgendamento()">
-            <option value="">Nenhum produto selecionado</option>
-            ${optProdutos}
-        </select>
-        
-        <label style="font-size:12px; color:#888; display:block; margin-top:10px">Horário:</label>
-        <select id="ag-hora-select">
-            <option value="">Escolha o profissional...</option>
-        </select>
+            <label style="font-size:12px; color:#888; display:block; margin-top:10px">Adicionar Produto (Opcional):</label>
+            <select id="ag-produto-select" onchange="app.atualizarTotalAgendamento()">
+                <option value="">Nenhum produto selecionado</option>
+                ${optProdutos}
+            </select>
+            
+            <label style="font-size:12px; color:#888; display:block; margin-top:10px">Horário:</label>
+            <select id="ag-hora-select">
+                <option value="">Escolha o profissional...</option>
+            </select>
 
-        <div id="total-preview" style="margin-top:20px; text-align:right; font-weight:bold; color:var(--success); font-size:18px; border-top:1px solid #333; padding-top:10px">
-            Total: R$ 0,00
+            <div id="total-preview" style="margin-top:20px; text-align:right; font-weight:bold; color:var(--success); font-size:18px; border-top:1px solid #333; padding-top:10px">
+                Total: R$ 0,00
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+                <button class="btn-primary" style="background: var(--accent); color: #000; font-weight: bold;" onclick="app.salvarAgenda()">Confirmar Agendamento</button>
+                
+                <button class="btn-primary" style="background:#333;" 
+                    onclick="${ehExterno ? "app.salvarAgenda('cancelar')" : "app.fecharModal()"}">
+                    Cancelar
+                </button>
+            </div>
         </div>
-        
-        <button class="btn-primary" style="margin-top:10px" onclick="app.salvarAgenda()">Confirmar Agendamento</button>
-        <button class="btn-primary" style="background:#333; margin-top:10px" onclick="app.fecharModal()">Cancelar</button>
     `;
-    this.abrirModalForm("Novo Agendamento", html);
+
+    this.abrirModalForm(ehExterno ? "Reserva de Horário" : "Novo Agendamento", html);
+
+    // Se for link externo, força o modal a ocupar a tela inteira
+    if (ehExterno) {
+        const sheet = document.querySelector('.bottom-sheet');
+        if (sheet) {
+            sheet.style.height = '100vh';
+            sheet.style.borderRadius = '0';
+        }
+    }
 },
+
     atualizarTotalAgendamento() {
     let total = 0;
     
@@ -366,7 +373,17 @@ prepararNovoAgendamento() {
     }
 },
 
-salvarAgenda() {
+
+   salvarAgenda(acao) {
+    const params = new URLSearchParams(window.location.search);
+    const ehExterno = params.has('agendar');
+
+    // --- ALERTA DE CANCELAMENTO PARA O CLIENTE DO LINK ---
+    if (ehExterno && acao === 'cancelar') {
+        alert("Pode continuar o seu agendamento a qualquer momento clicando em OK. Não perca o seu horário!");
+        return; 
+    }
+
     const cliente = document.getElementById('ag-nome').value;
     const data = document.getElementById('ag-data').value;
     const prestador = document.getElementById('ag-prestador-select').value;
@@ -389,18 +406,15 @@ salvarAgenda() {
         
         // --- NOVO: LÓGICA DE ABATIMENTO DE ESTOQUE ---
         if (produtoNome) {
-            // Localiza o produto no array de estoque pelo nome
             const itemEstoque = this.dados.estoque.find(p => p.nome === produtoNome);
             
             if (itemEstoque) {
                 const quantidadeAtual = parseInt(itemEstoque.qtd || 0);
                 
                 if (quantidadeAtual > 0) {
-                    // Abate uma unidade
                     itemEstoque.qtd = quantidadeAtual - 1;
                     console.log(`Estoque de ${produtoNome} atualizado para: ${itemEstoque.qtd}`);
                 } else {
-                    // Se selecionou produto mas acabou no meio tempo, avisa e para
                     alert(`O produto "${produtoNome}" acabou de esgotar no estoque!`);
                     return; 
                 }
@@ -410,50 +424,51 @@ salvarAgenda() {
         // --- SALVAR O DADO NA AGENDA ---
         this.dados.agenda.push({ 
             id: Date.now(), 
-            cliente, 
-            data, 
-            prestador, 
-            hora, 
+            cliente, data, prestador, hora, 
             servico: produtoNome ? `${servico} + ${produtoNome}` : servico, 
             produto: produtoNome || null,
             valorServico: precoServico,
             valorProduto: precoProduto,
             valor: valorFinal 
         });
-        
-        this.persistir(); // Salva tanto a agenda nova quanto o estoque diminuído
-
-        const params = new URLSearchParams(window.location.search);
-        const ehExterno = params.has('agendar');
 
         if (ehExterno) {
-            this.fecharModal();
-            document.body.innerHTML = `
-                <div style="height:100vh; background:#0f0f0f; display:flex; justify-content:center; align-items:center; font-family:sans-serif; padding:20px; color:white;">
-                    <div style="background:#1a1a1a; padding:40px; border-radius:20px; border:1px solid #D4AF37; text-align:center; max-width:400px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
-                        <div style="font-size:60px; color:#D4AF37; margin-bottom:20px;">✓</div>
-                        <h2 style="color:#D4AF37; margin-bottom:10px;">Agendamento Realizado!</h2>
-                        <p style="color:#ccc; margin-bottom:25px; line-height:1.6;">
-                            Olá <strong>${cliente}</strong>, seu horário para <strong>${servico}${produtoNome ? ' e ' + produtoNome : ''}</strong> com <strong>${prestador}</strong> foi reservado.
-                            <br><br>Total: <strong>R$ ${valorFinal.toFixed(2)}</strong>
-                        </p>
-                        <div style="background:#252525; padding:15px; border-radius:10px; margin-bottom:25px; text-align:left; border-left:4px solid #D4AF37;">
-                            <p style="margin:5px 0;">📅 Data: ${data.split('-').reverse().join('/')}</p>
-                            <p style="margin:5px 0;">⏰ Hora: ${hora}</p>
+            // --- AJUSTE AQUI: SALVAMENTO FORÇADO PARA EXTERNO ---
+            localStorage.setItem('barber_local_db', JSON.stringify(this.dados));
+            
+            console.log("Enviando agendamento para nuvem...");
+            
+            githubDB.salvar(this.dados).then(() => {
+                this.fecharModal();
+                document.body.innerHTML = `
+                    <div style="height:100vh; background:#0f0f0f; display:flex; justify-content:center; align-items:center; font-family:sans-serif; padding:20px; color:white;">
+                        <div style="background:#1a1a1a; padding:40px; border-radius:20px; border:1px solid #D4AF37; text-align:center; max-width:400px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+                            <div style="font-size:60px; color:#D4AF37; margin-bottom:20px;">✓</div>
+                            <h2 style="color:#D4AF37; margin-bottom:10px;">Agendamento Realizado!</h2>
+                            <p style="color:#ccc; margin-bottom:25px; line-height:1.6;">
+                                Olá <strong>${cliente}</strong>, seu horário foi reservado com sucesso.
+                            </p>
+                            <button onclick="window.location.reload()" style="width:100%; padding:15px; background:#D4AF37; border:none; border-radius:10px; font-weight:bold; cursor:pointer; color:black;">Sair</button>
                         </div>
-                        <button onclick="window.location.reload()" style="width:100%; padding:15px; background:#D4AF37; border:none; border-radius:10px; font-weight:bold; cursor:pointer; color:black; font-size:16px;">OK, ENTENDIDO</button>
                     </div>
-                </div>
-            `;
-            document.body.style.overflow = 'hidden';
+                    
+                `;
+            });
+            
             return; 
         }
 
+        // Se for o barbeiro usando o app internamente
+        this.persistir();
         this.fecharModal();
-        this.renderView('agenda'); 
-        
+        this.renderView('agenda');
     } else {
-        alert("Preencha todos os campos!");
+        // Se clicar em salvar sem preencher nada no modo link, também avisa para continuar
+        if (ehExterno) {
+            alert("Pode continuar o seu agendamento a qualquer momento clicando em OK. Não perca o seu horário!");
+        } else {
+            alert("Preencha todos os campos!");
+        }
     }
 },
 abrirCheckout(id) {
@@ -1092,10 +1107,9 @@ const githubDB = {
     owner: "jirineu",
     repo: "dados-barbearia",
 
+    // Recupera as credenciais globais (E-mail e Token)
     get creds() {
-        const user = localStorage.getItem('barber_current_user');
-        if (!user) return null;
-        const config = localStorage.getItem(`barber_auth_${user}`);
+        const config = localStorage.getItem('barber_auth');
         return config ? JSON.parse(config) : null;
     },
 
@@ -1116,10 +1130,13 @@ const githubDB = {
             if (res.status === 404) return null;
 
             const data = await res.json();
-            // Salva o SHA vinculado ao NOME DO ARQUIVO específico
+            // Armazena o SHA atual para permitir o próximo salvamento
             localStorage.setItem(`sha_${c.file}`, data.sha);
             return JSON.parse(decodeURIComponent(escape(atob(data.content))));
-        } catch (e) { return null; }
+        } catch (e) { 
+            console.error("Erro ao carregar:", e);
+            return null; 
+        }
     },
 
     async salvar(dados) {
@@ -1127,15 +1144,13 @@ const githubDB = {
         if (!c) return false;
 
         const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/${c.file}`;
-        // Busca o SHA que pertence apenas a este arquivo
         const currentSha = localStorage.getItem(`sha_${c.file}`);
 
         const corpo = {
-            message: `Sincronia: ${c.userName}`,
+            message: `Sincronia: ${c.userEmail}`,
             content: btoa(unescape(encodeURIComponent(JSON.stringify(dados, null, 2))))
         };
 
-        // Se o arquivo já existe no GitHub, o SHA é obrigatório para evitar o erro 422
         if (currentSha) corpo.sha = currentSha;
 
         try {
@@ -1150,79 +1165,80 @@ const githubDB = {
 
             if (res.ok) {
                 const resData = await res.json();
+                // Atualiza o SHA após o salvamento bem-sucedido
                 localStorage.setItem(`sha_${c.file}`, resData.content.sha);
                 return true;
             }
             return false;
-        } catch (e) { return false; }
+        } catch (e) { 
+            console.error("Erro ao salvar:", e);
+            return false; 
+        }
     }
 };
 // --- 2. FUNÇÕES DE SUPORTE ---
 // Garante que as credenciais sejam salvas e o app inicializado
+// Garante que as credenciais sejam salvas e o app inicializado
 async function configurarCloud() {
-    const userInput = document.getElementById('u-user').value.trim().toLowerCase();
+    const emailInput = document.getElementById('u-email').value.trim().toLowerCase();
     const tokenInput = document.getElementById('u-token').value.trim();
 
-    if (!userInput || !tokenInput) return alert("Preencha Usuário e Token.");
+    if (!emailInput || !tokenInput) return alert("Preencha E-mail e Token.");
 
-    // Gera o nome do arquivo baseado no que o cliente digitou na caixa de texto
-    const fileHash = btoa(userInput).replace(/=/g, "").substring(0, 10);
-    const fileName = `db_${fileHash}.json`;
+    // Gera o nome do arquivo baseado no e-mail (Exatamente como no RoutineAI)
+    const fileName = `db_${btoa(emailInput).substring(0, 8)}.json`;
 
-    // Define o contexto do novo usuário
-    localStorage.setItem('barber_current_user', userInput);
-    localStorage.setItem(`barber_auth_${userInput}`, JSON.stringify({
-        token: tokenInput, file: fileName, userName: userInput
+    // Define as credenciais globais
+    localStorage.clear(); // Limpa dados de logins anteriores
+    localStorage.setItem('barber_auth', JSON.stringify({
+        token: tokenInput, 
+        file: fileName, 
+        userEmail: emailInput
     }));
 
     try {
-        // Tenta carregar para ver se o arquivo já existe para esse nome
+        // Tenta carregar para ver se o arquivo já existe no repositório
         const dadosNuvem = await githubDB.carregar();
         
         if (dadosNuvem) {
             app.dados = dadosNuvem;
-            alert(`Bem-vindo de volta, ${userInput}!`);
+            alert(`Bem-vindo de volta!`);
         } else {
-            // É UM USUÁRIO NOVO: Resetamos os dados na memória
+            // USUÁRIO NOVO: Estrutura inicial da barbearia
             app.dados = { 
-                usuario: userInput, 
+                usuario: emailInput, 
                 caixa: 0, agenda: [], historico: [], prestadores: [], estoque: [], servicos: [],
                 config: { inicioDia: 8, fimDia: 19, intervalo: 30 }
             };
 
-            // CRIAÇÃO FÍSICA: Faz o post para criar o arquivo .json no GitHub
+            // CRIAÇÃO FÍSICA no GitHub
             const sucessoAoCriar = await githubDB.salvar(app.dados);
-            if (!sucessoAoCriar) throw new Error("Erro ao criar arquivo no repositório.");
+            if (!sucessoAoCriar) throw new Error("Erro ao criar banco de dados no GitHub. Verifique o Token.");
             
-            alert(`Banco de dados criado para: ${userInput}`);
+            alert(`Novo banco de dados criado para: ${emailInput}`);
         }
 
-        // Salva backup local e entra
-        localStorage.setItem(`barber_data_${userInput}`, JSON.stringify(app.dados));
+        // Salva backup local e recarrega
+        localStorage.setItem(`barber_local_db`, JSON.stringify(app.dados));
         window.location.reload(); 
 
     } catch (e) {
         alert("Falha: " + e.message);
     }
 }
-// Verifique se a função de sincronização inicial existe
+
+// Sincronização automática inicial
 async function sincronizarComGithub() {
-    if (!githubDB.token || !githubDB.path) return false;
+    // Verifica se as credenciais existem
+    if (!githubDB.creds) return false;
     
     try {
         const dadosNuvem = await githubDB.carregar();
         
         if (dadosNuvem) {
             app.dados = dadosNuvem;
-
-            // LÓGICA DE CRIAÇÃO: Se carregou mas não tem SHA, o arquivo não existe no GitHub.
-            // Precisamos salvar uma vez para "criar" o arquivo fisicamente.
-            if (!githubDB.sha) {
-                console.log("Arquivo novo detectado. Criando banco no GitHub...");
-                const criado = await githubDB.salvar(app.dados);
-                if (criado) console.log("✅ Banco de dados criado com sucesso!");
-            }
-            
+            // Salva no cache local para uso offline
+            localStorage.setItem(`barber_local_db`, JSON.stringify(app.dados));
             return true;
         }
     } catch (e) {
@@ -1230,58 +1246,67 @@ async function sincronizarComGithub() {
     }
     return false;
 }
+
+// Função de Logout inspirada no seu exemplo
+function logout() {
+    if(confirm("Deseja realmente sair?")) {
+        localStorage.clear();
+        location.reload();
+    }
+}
 // --- 3. INICIALIZAÇÃO ÚNICA DO SISTEMA ---
 window.onload = async () => {
-    // 1. Descobre quem é o usuário selecionado neste dispositivo
-    const userAtivo = localStorage.getItem('barber_current_user');
+    // 1. Verifica se existe uma credencial ativa (E-mail + Token)
+    const credencial = githubDB.creds;
     const authScreen = document.getElementById('auth-screen');
     const mainApp = document.getElementById('main-app');
 
-    // Se não tiver usuário ativo, mostra a tela de login
-    if (!userAtivo) {
+    // Se não tiver login, mostra a tela de autenticação
+    if (!credencial) {
         if (authScreen) authScreen.style.display = 'flex';
         if (mainApp) mainApp.style.display = 'none';
         return;
     }
 
-    // Se tem usuário, libera o app
+    // Se está logado, libera o app e esconde o login
     if (authScreen) authScreen.style.display = 'none';
     if (mainApp) mainApp.style.display = 'block';
 
-    // 2. Tenta carregar os dados da nuvem 
-    // O githubDB.carregar() agora já sabe buscar barber_auth_USUARIO internamente
+    // 2. Tenta carregar os dados da nuvem
     const dadosNuvem = await githubDB.carregar();
     
     if (dadosNuvem) {
         app.dados = dadosNuvem;
         
-        // Se o arquivo acabou de ser criado (sem SHA no carregamento), força o primeiro push
-        const currentConfig = githubDB.creds;
-        const currentSha = localStorage.getItem(`sha_${currentConfig?.file}`);
-        
+        // Verifica se precisa criar o arquivo físico inicial no GitHub (primeiro acesso)
+        const currentSha = localStorage.getItem(`sha_${credencial.file}`);
         if (!currentSha) {
-            console.log("Criando arquivo físico inicial para:", userAtivo);
+            console.log("Sincronizando banco inicial na nuvem...");
             await githubDB.salvar(app.dados);
         }
     } else {
-        // 3. Se falhar a nuvem, busca o backup local ESPECÍFICO deste usuário
-        const local = localStorage.getItem(`barber_data_${userAtivo}`);
+        // 3. Se falhar a nuvem (offline), busca o backup local
+        const local = localStorage.getItem('barber_local_db');
         if (local) {
             app.dados = JSON.parse(local);
         }
     }
 
-    // 4. Garante estrutura mínima e o nome do usuário correto nos dados
+    // 4. Garante estrutura mínima para evitar erros de undefined
     const padrao = { 
-        usuario: userAtivo, 
-        servicos: [], prestadores: [], agenda: [], estoque: [], caixa: 0, historico: [] 
+        usuario: credencial.userEmail, 
+        servicos: [], prestadores: [], agenda: [], estoque: [], caixa: 0, historico: [],
+        config: { inicioDia: 8, fimDia: 19, intervalo: 30 }
     };
     app.dados = { ...padrao, ...app.dados };
+
+    // Salva o estado atual no cache local para uso rápido
+    localStorage.setItem('barber_local_db', JSON.stringify(app.dados));
 
     // 5. Renderiza a visão inicial
     app.renderView('dash');
 
-    // Lógica de agendamento ou Dashboard
+    // Lógica para links externos de agendamento (?agendar)
     const params = new URLSearchParams(window.location.search);
     if (params.has('agendar')) {
         const esconder = ['.tab-bar', '.mobile-header', '#view-dash', '.admin-only'];
@@ -1297,14 +1322,11 @@ window.onload = async () => {
         }, 300);
     }
 };
-function trocarUsuario(novoUsuario) {
-    // Apenas muda o ponteiro do usuário ativo
-    localStorage.setItem('barber_current_user', novoUsuario);
-    location.reload();
-}
 
+// Logout limpa tudo para permitir login com outro e-mail
 function logout() {
-    // Sai da conta atual mas mantém os dados salvos no dispositivo
-    localStorage.removeItem('barber_current_user');
-    location.reload();
+    if(confirm("Deseja realmente sair?")) {
+        localStorage.clear();
+        location.reload();
+    }
 }
