@@ -38,3 +38,48 @@ select {
     background-size: 1em;
 }
 /* Bloqueio inicial: ninguém aparece até que o JS autorize */
+
+/* --- MODO CLIENTE (LINK EXTERNO) --- */
+
+/* Esconde TUDO da administração quando a classe agendar-mode está no body */
+body.agendar-mode .mobile-header,
+body.agendar-mode .tab-bar,
+body.agendar-mode .admin-only,
+body.agendar-mode #view-dash,
+body.agendar-mode .btn-small:not(.btn-confirmar) {
+    display: none !important;
+}
+
+/* Garante que o fundo seja sempre escuro e elegante para o cliente */
+body.agendar-mode {
+    background: #000 !important;
+    padding: 0 !important;
+}
+
+/* Estilização do Modal de Agendamento para o Cliente */
+body.agendar-mode .bottom-sheet {
+    height: 100vh; /* Ocupa a tela toda no link */
+    border-radius: 0;
+    background: #121212;
+    padding-top: 40px;
+}
+
+/* Destaque para o Título no modo cliente */
+body.agendar-mode h3::before {
+    content: "Reserva de Horário";
+    display: block;
+    font-size: 24px;
+    color: var(--accent);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* Inputs mais luxuosos para o cliente */
+body.agendar-mode input, 
+body.agendar-mode select {
+    background: #1a1a1a !important;
+    border: 1px solid #333 !important;
+    height: 55px;
+    font-size: 16px;
+    margin-bottom: 15px;
+}
