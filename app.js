@@ -1079,25 +1079,38 @@ salvarServico() {
 },
 compartilharLink() {
     try {
+        // Busca as credenciais que já estão configuradas no sistema
+        const creds = githubDB.creds;
+
+        if (!creds || !creds.token || !creds.userEmail) {
+            alert("Erro: Você precisa estar logado (Token e E-mail) para gerar um link funcional!");
+            return;
+        }
+
         if (!this.dados.servicos || this.dados.servicos.length === 0) {
             alert("Cadastre pelo menos um serviço antes de compartilhar!");
             return;
         }
 
-        const dadosSimples = {
+        // AGORA INCLUÍMOS O TOKEN E O E-MAIL NO OBJETO
+        const dadosCompletos = {
             s: this.dados.servicos,
-            p: this.dados.prestadores
+            p: this.dados.prestadores,
+            t: creds.token,      // Token do GitHub
+            e: creds.userEmail,  // E-mail do usuário
+            f: creds.file        // Nome do arquivo (ex: barber_db.json)
         };
         
-        const token = btoa(unescape(encodeURIComponent(JSON.stringify(dadosSimples))));
-        const url = window.location.origin + window.location.pathname + `?agendar=true&data=${token}`;
+        // Transforma tudo em uma string segura para URL (Base64)
+        const tokenUrl = btoa(unescape(encodeURIComponent(JSON.stringify(dadosCompletos))));
+        const url = window.location.origin + window.location.pathname + `?agendar=true&data=${tokenUrl}`;
         
         navigator.clipboard.writeText(url).then(() => {
-            alert("Link de agendamento copiado! Envie para seus clientes.");
+            alert("Link Mágico gerado! O cliente entrará direto na sua agenda sem precisar configurar nada.");
         });
     } catch (e) {
         console.error("Erro ao gerar link:", e);
-        alert("Não foi possível gerar o link. Verifique se os dados estão corretos.");
+        alert("Não foi possível gerar o link.");
     }
 },
 }
@@ -1306,21 +1319,48 @@ window.onload = async () => {
     // 5. Renderiza a visão inicial
     app.renderView('dash');
 
-    // Lógica para links externos de agendamento (?agendar)
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('agendar')) {
-        const esconder = ['.tab-bar', '.mobile-header', '#view-dash', '.admin-only'];
-        esconder.forEach(s => { 
-            const el = document.querySelector(s); 
-            if (el) el.style.display = 'none'; 
-        });
-        document.body.style.background = "#000";
-        if (app.prepararNovoAgendamento) app.prepararNovoAgendamento();
-    } else {
-        setTimeout(() => {
-            if (app.atualizarDashPorPeriodo) app.atualizarDashPorPeriodo('mes');
-        }, 300);
+   
+  // Lógica para links externos de agendamento (?agendar)
+const params = new URLSearchParams(window.location.search);
+if (params.has('agendar')) {
+    // Se houver dados no link, vamos tentar "logar" o cliente automaticamente
+    if (params.has('data')) {
+        try {
+            const info = JSON.parse(decodeURIComponent(escape(atob(params.get('data')))));
+            
+            // Se o link trouxe Token e E-mail, configuramos o acesso do cliente
+            if (info.t && info.e) {
+                const authData = {
+                    token: info.t,
+                    userEmail: info.e,
+                    file: info.f || 'barber_db.json'
+                };
+                // Salva na memória do navegador do cliente para que as funções de salvar funcionem
+                localStorage.setItem('barber_auth', JSON.stringify(authData));
+                githubDB.creds = authData; 
+                
+                // Carrega os serviços que vieram no link para ser instantâneo
+                app.dados.servicos = info.s || [];
+                app.dados.prestadores = info.p || [];
+            }
+        } catch (e) {
+            console.error("Erro ao decodificar dados do link", e);
+        }
     }
+
+    // Esconde a interface administrativa para o cliente
+    const esconder = ['.tab-bar', '.mobile-header', '#view-dash', '.admin-only', '#auth-screen'];
+    esconder.forEach(s => { 
+        const el = document.querySelector(s); 
+        if (el) el.style.display = 'none'; 
+    });
+    
+    document.body.style.background = "#000";
+    document.getElementById('main-app').style.display = 'block';
+
+    // Abre direto a tela de novo agendamento
+    if (app.prepararNovoAgendamento) app.prepararNovoAgendamento();
+}
 };
 
 // Logout limpa tudo para permitir login com outro e-mail
@@ -1330,5 +1370,3 @@ function logout() {
         location.reload();
     }
 }
-
-
