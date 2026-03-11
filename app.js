@@ -86,7 +86,7 @@ atualizarDashPorPeriodo(periodo) {
     } else if (periodo === 'ano') {
         inicio = new Date(agora.getFullYear(), 0, 1);
     } else if (periodo === 'tudo') {
-        inicio = new Date(0); // Data zero (1970) para pegar tudo
+        inicio = new Date(0); 
     }
 
     const filtrados = this.dados.historico.filter(h => {
@@ -100,13 +100,46 @@ atualizarDashPorPeriodo(periodo) {
         return dataH >= inicio;
     });
 
-    // Cálculos Financeiros
+    // --- NOVA LÓGICA DE CÁLCULO POR PAGAMENTO ---
+    const resumoPg = { pix: 0, dinheiro: 0, credito: 0, debito: 0 };
+    
+    filtrados.forEach(item => {
+        // Só contabiliza se for serviço (ignora ajustes se houver)
+        const isServico = item.cliente !== "AJUSTE MANUAL" && item.cliente !== "PAGAMENTO REALIZADO";
+        if (isServico && item.pagamento && resumoPg.hasOwnProperty(item.pagamento)) {
+            resumoPg[item.pagamento] += parseFloat(item.valorBruto || item.valor || 0);
+        }
+    });
+
+    // Atualiza os labels do painel expandível se eles existirem na tela
+    if (document.getElementById('resumo-pix')) {
+        document.getElementById('resumo-pix').innerText = `R$ ${resumoPg.pix.toFixed(2)}`;
+        document.getElementById('resumo-dinheiro').innerText = `R$ ${resumoPg.dinheiro.toFixed(2)}`;
+        document.getElementById('resumo-credito').innerText = `R$ ${resumoPg.credito.toFixed(2)}`;
+        document.getElementById('resumo-debito').innerText = `R$ ${resumoPg.debito.toFixed(2)}`;
+    }
+    // --------------------------------------------
+
+    // Cálculos Financeiros Originais
     const bruto = filtrados.reduce((acc, curr) => acc + (parseFloat(curr.valorBruto || curr.valor || 0)), 0);
     const liquido = filtrados.reduce((acc, curr) => acc + (parseFloat(curr.valorLiquido || 0)), 0);
 
     // Renderiza a interface enviando o período para os labels
     this.atualizarInterfaceDash(periodo, bruto, liquido, filtrados);
 },
+
+toggleResumoPagamento() {
+        const painel = document.getElementById('dash-pagamentos-resumo');
+        const seta = document.getElementById('seta-resumo');
+        
+        if (painel.style.display === 'none') {
+            painel.style.display = 'block';
+            seta.innerText = '▲';
+        } else {
+            painel.style.display = 'none';
+            seta.innerText = '▼';
+        }
+    }, // <-- Certifique-se de que há uma VÍRGULA aqui se houver outra função depois
 // Função auxiliar para evitar repetição de código
 atualizarInterfaceDash(texto, bruto, liquido, listaFiltrada) {
     const elBruto = document.getElementById('dash-bruto');
@@ -248,10 +281,16 @@ filtrarHistorico() {
         // O que mostrar no valor principal (lado direito)
         let valorPrincipal = isServico ? vLiquido : vComissao;
 
+        // --- Lógica das Pílulas de Pagamento ---
+        const coresPg = { pix: '#00ced1', dinheiro: '#2ecc71', credito: '#e67e22', debito: '#9b59b6' };
+        const corBadge = coresPg[h.pagamento] || '#444';
+        const badgeHtml = h.pagamento ? `<span style="background:${corBadge}; color:white; font-size:8px; padding:2px 5px; border-radius:4px; margin-left:5px; text-transform:uppercase; font-weight:bold; vertical-align:middle;">${h.pagamento}</span>` : '';
+
         return `
             <div class="item-list" style="border-left: 4px solid ${corBorda}; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; padding: 12px; border-radius: 8px;">
                 <div>
                     <strong style="color:${isServico ? 'var(--success)' : 'white'}; font-size:13px">${labelTipo}</strong>
+                    ${badgeHtml}
                     <span style="color:#666; font-size:11px; margin-left:5px">${h.servico || ''}</span><br>
                     
                     <small style="color:#aaa">Profissional: <b>${h.prestador || '---'}</b></small><br>
@@ -438,22 +477,45 @@ prepararNovoAgendamento() {
             
             console.log("Enviando agendamento para nuvem...");
             
-            githubDB.salvar(this.dados).then(() => {
-                this.fecharModal();
-                document.body.innerHTML = `
-                    <div style="height:100vh; background:#0f0f0f; display:flex; justify-content:center; align-items:center; font-family:sans-serif; padding:20px; color:white;">
-                        <div style="background:#1a1a1a; padding:40px; border-radius:20px; border:1px solid #D4AF37; text-align:center; max-width:400px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
-                            <div style="font-size:60px; color:#D4AF37; margin-bottom:20px;">✓</div>
-                            <h2 style="color:#D4AF37; margin-bottom:10px;">Agendamento Realizado!</h2>
-                            <p style="color:#ccc; margin-bottom:25px; line-height:1.6;">
-                                Olá <strong>${cliente}</strong>, seu horário foi reservado com sucesso.
-                            </p>
-                            <button onclick="window.location.reload()" style="width:100%; padding:15px; background:#D4AF37; border:none; border-radius:10px; font-weight:bold; cursor:pointer; color:black;">Sair</button>
-                        </div>
-                    </div>
-                    
-                `;
-            });
+         githubDB.salvar(this.dados).then(() => {
+    // 1. Salva o link completo (que contém o token) em uma variável temporária
+    const linkReagendamento = window.location.href;
+
+    // 2. PONTO ZERO: Limpa absolutamente tudo do navegador do cliente
+    localStorage.removeItem('barber_auth');
+    localStorage.removeItem('barber_local_db');
+    
+    // Limpa os dados da memória do aplicativo
+    githubDB.creds = null;
+    app.dados.servicos = [];
+    app.dados.prestadores = [];
+    app.dados.agenda = [];
+
+    this.fecharModal();
+
+    // 3. EXIBE A MENSAGEM FINAL (TELA LIMPA)
+    document.body.innerHTML = `
+        <div style="height:100vh; background:#0f0f0f; display:flex; justify-content:center; align-items:center; font-family:sans-serif; padding:20px; color:white;">
+            <div style="background:#1a1a1a; padding:40px; border-radius:20px; border:1px solid #D4AF37; text-align:center; max-width:400px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+                
+                <div style="font-size:60px; color:#D4AF37; margin-bottom:20px;">✓</div>
+                
+                <h2 style="color:#D4AF37; margin-bottom:10px;">Agendamento Confirmado!</h2>
+                
+                <p style="color:#ccc; margin-bottom:30px; line-height:1.6;">
+                    Olá <strong>${cliente}</strong>, seu horário foi reservado com sucesso.<br>
+                    Obrigado pela preferência!
+                </p>
+
+                <button onclick="window.location.href='${linkReagendamento}'" 
+                    style="width:100%; padding:18px; background:#D4AF37; border:none; border-radius:12px; font-weight:bold; cursor:pointer; color:black; font-size:16px; transition: 0.3s; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);">
+                    Fazer outro agendamento
+                </button>
+                
+            </div>
+        </div>
+    `;
+});
             
             return; 
         }
@@ -483,7 +545,17 @@ abrirCheckout(id) {
         <p><strong>Serviço:</strong> ${item.servico}</p>
         <p><strong>Barbeiro:</strong> ${item.prestador}</p>
         
-        <div style="margin: 20px 0; padding: 20px; background: #1a1a1a; border-radius: 10px; text-align: center; border: 1px solid #333;">
+        <div style="margin: 20px 0; padding: 15px; background: #1a1a1a; border-radius: 10px; text-align: left; border: 1px solid #333;">
+            <label style="color: #888; font-size: 12px; display: block; margin-bottom: 8px;">Forma de Pagamento:</label>
+            <select id="checkout-pagamento" style="width: 100%; padding: 10px; border-radius: 8px; background: #000; color: white; border: 1px solid #444;">
+                <option value="dinheiro">💵 Dinheiro</option>
+                <option value="pix">📱 PIX</option>
+                <option value="credito">💳 Crédito</option>
+                <option value="debito">💳 Débito</option>
+            </select>
+        </div>
+
+        <div style="margin: 15px 0; padding: 15px; background: #1a1a1a; border-radius: 10px; text-align: center; border: 1px solid #333;">
             <span style="color: #888; font-size: 14px;">Total Pago pelo Cliente:</span>
             <h2 style="color:var(--success); margin-top:5px">R$ ${valorBruto.toFixed(2)}</h2>
         </div>
@@ -529,6 +601,9 @@ finalizarPagamento(id) {
     const index = this.dados.agenda.findIndex(a => a.id === id);
     if (index === -1) return;
 
+    // --- CAPTURA A FORMA DE PAGAMENTO DO MODAL ---
+    const formaPagamento = document.getElementById('checkout-pagamento').value;
+
     const itemConcluido = this.dados.agenda[index];
     let custoProdutoTotal = 0;
 
@@ -548,33 +623,30 @@ finalizarPagamento(id) {
     let valorComissaoCalculada = 0;
 
     if (funcionario) {
-        const tipo = funcionario.tipo || 'fixo'; // Padrão 'fixo' para compatibilidade com antigos
+        const tipo = funcionario.tipo || 'fixo';
         const valorBaseComissao = parseFloat(funcionario.comissao) || 0;
 
         if (tipo === 'porcentagem') {
-            // Calcula % sobre o valor bruto do serviço
             valorComissaoCalculada = valorBruto * (valorBaseComissao / 100);
         } else if (tipo === 'fixo') {
-            // Valor fixo em Reais
             valorComissaoCalculada = valorBaseComissao;
         } else if (tipo === 'dono') {
-            // Se for dono, a comissão é zero (lucro total para a casa)
             valorComissaoCalculada = 0;
         }
     }
 
     // --- CÁLCULO FINANCEIRO FINAL ---
-    // Lucro Real = O que o cliente pagou - Comissão - Custo do produto usado
     const valorLiquido = valorBruto - valorComissaoCalculada - custoProdutoTotal;
 
     // Atualiza o Caixa da Casa
     if (typeof this.dados.caixa !== 'number') this.dados.caixa = 0;
     this.dados.caixa += valorLiquido;
 
-    // Salva no Histórico com os detalhes atualizados
+    // Salva no Histórico com o indicador de pagamento
     if (!this.dados.historico) this.dados.historico = [];
     this.dados.historico.push({
         ...itemConcluido,
+        pagamento: formaPagamento, // <--- ADICIONADO AQUI
         valorBruto: valorBruto,           
         valorComissao: valorComissaoCalculada, 
         valorCustoItem: custoProdutoTotal, 
@@ -588,12 +660,7 @@ finalizarPagamento(id) {
     this.fecharModal();
     this.renderView('dash');
 
-    // Log para conferência exata no console
-    console.log(`Venda Finalizada (${funcionario?.tipo || 'N/A'}): 
-        Bruto: R$ ${valorBruto.toFixed(2)} 
-        (-) Comissão: R$ ${valorComissaoCalculada.toFixed(2)} 
-        (-) Custo Prod: R$ ${custoProdutoTotal.toFixed(2)} 
-        (=) Lucro Real: R$ ${valorLiquido.toFixed(2)}`);
+    console.log(`Venda Finalizada (${formaPagamento}): Lucro R$ ${valorLiquido.toFixed(2)}`);
 },
     // --- FUNÇÕES DE APOIO (MANTIDAS) ---
 filtrarLista(tipo, termo) {
@@ -1269,10 +1336,36 @@ function logout() {
 }
 // --- 3. INICIALIZAÇÃO ÚNICA DO SISTEMA ---
 window.onload = async () => {
-    // 1. Verifica se existe uma credencial ativa (E-mail + Token)
-    const credencial = githubDB.creds;
     const authScreen = document.getElementById('auth-screen');
     const mainApp = document.getElementById('main-app');
+    const params = new URLSearchParams(window.location.search);
+
+    // --- INÍCIO DA PARTE MOVIDA PARA O TOPO ---
+    // Movemos a leitura do link para cá para que o sistema saiba quem é o usuário ANTES de pedir login
+    if (params.has('agendar') && params.has('data')) {
+        try {
+            const info = JSON.parse(decodeURIComponent(escape(atob(params.get('data')))));
+            if (info.t && info.e) {
+                const authData = {
+                    token: info.t,
+                    userEmail: info.e,
+                    file: info.f || 'barber_db.json'
+                };
+                // Injeta as credenciais para o sistema reconhecer o dono do link
+                localStorage.setItem('barber_auth', JSON.stringify(authData));
+                githubDB.creds = authData; 
+                
+                app.dados.servicos = info.s || [];
+                app.dados.prestadores = info.p || [];
+            }
+        } catch (e) {
+            console.error("Erro ao processar dados do link", e);
+        }
+    }
+    // --- FIM DA PARTE MOVIDA ---
+
+    // 1. Agora o githubDB.creds já terá os dados se veio pelo link
+    const credencial = githubDB.creds;
 
     // Se não tiver login, mostra a tela de autenticação
     if (!credencial) {
@@ -1291,21 +1384,19 @@ window.onload = async () => {
     if (dadosNuvem) {
         app.dados = dadosNuvem;
         
-        // Verifica se precisa criar o arquivo físico inicial no GitHub (primeiro acesso)
         const currentSha = localStorage.getItem(`sha_${credencial.file}`);
         if (!currentSha) {
             console.log("Sincronizando banco inicial na nuvem...");
             await githubDB.salvar(app.dados);
         }
     } else {
-        // 3. Se falhar a nuvem (offline), busca o backup local
         const local = localStorage.getItem('barber_local_db');
         if (local) {
             app.dados = JSON.parse(local);
         }
     }
 
-    // 4. Garante estrutura mínima para evitar erros de undefined
+    // 4. Garante estrutura mínima
     const padrao = { 
         usuario: credencial.userEmail, 
         servicos: [], prestadores: [], agenda: [], estoque: [], caixa: 0, historico: [],
@@ -1313,42 +1404,13 @@ window.onload = async () => {
     };
     app.dados = { ...padrao, ...app.dados };
 
-    // Salva o estado atual no cache local para uso rápido
     localStorage.setItem('barber_local_db', JSON.stringify(app.dados));
 
     // 5. Renderiza a visão inicial
     app.renderView('dash');
 
-   
- // Lógica para links externos de agendamento (?agendar)
-    const params = new URLSearchParams(window.location.search);
+    // Lógica visual para esconder menus se for cliente
     if (params.has('agendar')) {
-        // Se o link contiver dados codificados
-        if (params.has('data')) {
-            try {
-                const info = JSON.parse(decodeURIComponent(escape(atob(params.get('data')))));
-                
-                // Se o link trouxe Token e E-mail, configuramos o login automático do cliente
-                if (info.t && info.e) {
-                    const authData = {
-                        token: info.t,
-                        userEmail: info.e,
-                        file: info.f || 'barber_db.json'
-                    };
-                    // Injeta as credenciais no navegador do cliente
-                    localStorage.setItem('barber_auth', JSON.stringify(authData));
-                    githubDB.creds = authData; 
-                    
-                    // Alimenta os serviços e prestadores para carregar na hora
-                    app.dados.servicos = info.s || [];
-                    app.dados.prestadores = info.p || [];
-                }
-            } catch (e) {
-                console.error("Erro ao processar dados do link", e);
-            }
-        }
-
-        // Esconde o painel administrativo
         const esconder = ['.tab-bar', '.mobile-header', '#view-dash', '.admin-only', '#auth-screen'];
         esconder.forEach(s => { 
             const el = document.querySelector(s); 
@@ -1358,7 +1420,6 @@ window.onload = async () => {
         document.body.style.background = "#000";
         document.getElementById('main-app').style.display = 'block';
         
-        // Abre o formulário de agendamento para o cliente
         if (app.prepararNovoAgendamento) app.prepararNovoAgendamento();
     }
 };
