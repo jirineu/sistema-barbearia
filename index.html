@@ -55,6 +55,30 @@
         </div>
     </div>
 
+    <button onclick="app.toggleResumoPagamento()" style="width: 100%; padding: 12px; background: #1a1a1a; color: #D4AF37; border: 1px solid #333; border-radius: 12px; margin: 15px 0; font-weight: bold; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+        <span>📊 Detalhes de Recebimento</span>
+        <span id="seta-resumo">▼</span>
+    </button>
+
+    <div id="dash-pagamentos-resumo" style="display: none; background: #111827; padding: 15px; border-radius: 15px; border: 1px solid #D4AF37; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #1f2937; padding-bottom: 5px;">
+            <span style="color:#00ced1; font-size: 12px; font-weight: bold;">📱 PIX</span>
+            <strong id="resumo-pix" style="color:white; font-size: 14px;">R$ 0,00</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #1f2937; padding-bottom: 5px;">
+            <span style="color:#2ecc71; font-size: 12px; font-weight: bold;">💵 DINHEIRO</span>
+            <strong id="resumo-dinheiro" style="color:white; font-size: 14px;">R$ 0,00</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #1f2937; padding-bottom: 5px;">
+            <span style="color:#e67e22; font-size: 12px; font-weight: bold;">💳 CRÉDITO</span>
+            <strong id="resumo-credito" style="color:white; font-size: 14px;">R$ 0,00</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+            <span style="color:#9b59b6; font-size: 12px; font-weight: bold;">💳 DÉBITO</span>
+            <strong id="resumo-debito" style="color:white; font-size: 14px;">R$ 0,00</strong>
+        </div>
+    </div>
+
     <div class="lista-box" style="background: var(--card); padding: 15px; border-radius: 15px;">
         <h4 style="font-size: 11px; color: var(--accent); margin-bottom: 15px; text-transform: uppercase;">Recordes do Período</h4>
         
