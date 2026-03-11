@@ -1,3 +1,11 @@
+container-mobile { 
+    padding: 70px 15px 100px 15px !important; /* Reduzi o topo de 80 para 70 */
+    min-height: 100vh; 
+}
+
+.view-section {
+    padding-top: 10px !important; /* Força as seções a começarem no topo */
+}
 :root {
     --bg: #121212; --card: #1e1e1e; --accent: #D4AF37;
     --text: #ffffff; --danger: #ff4d4d; --success: #2ecc71;
