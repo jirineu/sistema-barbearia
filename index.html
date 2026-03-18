@@ -29,10 +29,38 @@
     </div>
 </div>
     <div id="main-app" style="display: none;">
-      <header class="mobile-header">
+     <header class="mobile-header">
     <span>Barber<span>Pro</span></span>
-    <button onclick="logout()" style="position: absolute; right: 10px; background: none; border: none; color: #ef4444; font-size: 0.7rem;">Sair</button>
+    <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 12px;">
+        <button onclick="app.renderView('config')" style="background: none; border: none; color: #94a3b8; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center;">
+            ⚙️
+        </button>
+        <button onclick="logout()" style="background: none; border: none; color: #ef4444; font-size: 0.7rem; font-weight: 600; cursor: pointer;">
+            SAIR
+        </button>
+    </div>
 </header>
+
+<section id="view-config" class="view-section" style="display:none; flex-direction: column; height: 90vh;">
+    
+    <div style="display:flex; align-items:center; gap: 15px; padding: 15px; border-bottom: 1px solid #333;">
+        <button class="btn-small" onclick="app.renderView('dash')" style="background: #333; width: auto;">← Voltar</button>
+        <h3 style="margin:0">Configurar Horários</h3>
+    </div>
+
+    <div id="config-horarios-lista" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px;">
+        </div>
+
+    <div style="padding: 15px; border-top: 1px solid #333; background: var(--bg-card);">
+        <button onclick="app.salvarConfiguracoesHorario()" class="btn-confirmar" style="width: 100%; background: #2ecc71; padding: 15px; border-radius: 10px; font-weight: bold; box-shadow: 0 -5px 15px rgba(0,0,0,0.3);">
+            SALVAR CONFIGURAÇÕES
+        </button>
+        
+        <button onclick="app.renderView('dash')" style="width: 100%; background: #ff0000; padding: 15px; border-radius: 10px; font-weight: bold; box-shadow: 0 -5px 15px rgba(0,0,0,0.3);">
+            Cancelar alterações
+        </button>
+    </div>
+</section>
 
     <main class="container-mobile">
 <section id="view-dash" class="view-section">
