@@ -7,9 +7,81 @@ const app = {
         estoque: [], 
         servicos: [],
         logsAcertos: [], // Novo: Armazena o histórico de edições de saldo
-        config: { inicioDia: 8, fimDia: 19, intervalo: 30 }
+        // Dentro de app.dados
+config: {
+    diasTrabalho: {
+        0: { ativo: false, inicio: "08:00", fim: "18:00", almocoInicio: "12:00", almocoFim: "13:00" }, // Domingo
+        1: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" }, // Segunda
+        2: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" }, // Terça
+        3: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" }, // Quarta
+        4: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" }, // Quinta
+        5: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" }, // Sexta
+        6: { ativo: true,  inicio: "08:00", fim: "18:00", almocoInicio: "12:00", almocoFim: "13:00" }  // Sábado
     },
+    intervalo: 30 // minutos entre cada horário na agenda
+}
+    },
+// Renderiza a lista de dias na tela de configurações
+renderizarConfigHorarios() {
+    const container = document.getElementById('config-horarios-lista');
+    if (!container) return; // Segurança caso o elemento não exista
 
+    const diasNomes = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+    container.innerHTML = '';
+
+    diasNomes.forEach((nome, i) => {
+        // BUSCA O DADO EXISTENTE OU DEFINE UM PADRÃO (IMPORTANTE!)
+        const d = (this.dados.config && this.dados.config.diasTrabalho && this.dados.config.diasTrabalho[i]) 
+                  ? this.dados.config.diasTrabalho[i] 
+                  : { ativo: false, inicio: "08:00", fim: "18:00", almocoInicio: "12:00", almocoFim: "13:00" };
+
+        container.innerHTML += `
+            <div class="card" style="padding: 15px; border-left: 4px solid ${d.ativo ? 'var(--accent)' : '#444'}; background: #1e1e1e; margin-bottom: 10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                    <label style="font-weight:bold; color: ${d.ativo ? '#fff' : '#888'}">${nome}</label>
+                    <input type="checkbox" id="dia-${i}-ativo" ${d.ativo ? 'checked' : ''} onchange="app.toggleDiaConfig(${i})">
+                </div>
+                <div id="inputs-dia-${i}" style="display: ${d.ativo ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.8rem; color: #ccc;">
+                    <div>Abertura: <input type="time" id="dia-${i}-inicio" value="${d.inicio}" style="width:100%; padding:8px; border-radius:5px; border:1px solid #444; background:#000; color:#fff"></div>
+                    <div>Fechamento: <input type="time" id="dia-${i}-fim" value="${d.fim}" style="width:100%; padding:8px; border-radius:5px; border:1px solid #444; background:#000; color:#fff"></div>
+                    <div>Almoço (Início): <input type="time" id="dia-${i}-almoco-ini" value="${d.almocoInicio}" style="width:100%; padding:8px; border-radius:5px; border:1px solid #444; background:#000; color:#fff"></div>
+                    <div>Almoço (Fim): <input type="time" id="dia-${i}-almoco-fim" value="${d.almocoFim}" style="width:100%; padding:8px; border-radius:5px; border:1px solid #444; background:#000; color:#fff"></div>
+                </div>
+            </div>
+        `;
+    });
+},
+
+toggleDiaConfig(dia) {
+    const div = document.getElementById(`inputs-dia-${dia}`);
+    const checkbox = document.getElementById(`dia-${dia}-ativo`);
+    if (div && checkbox) {
+        div.style.display = checkbox.checked ? 'grid' : 'none';
+        // Atualiza a borda do card para dar feedback visual
+        div.parentElement.style.borderLeftColor = checkbox.checked ? 'var(--accent)' : '#444';
+    }
+},
+
+salvarConfiguracoesHorario() {
+    // Inicializa a estrutura se não existir
+    if (!this.dados.config) this.dados.config = {};
+    if (!this.dados.config.diasTrabalho) this.dados.config.diasTrabalho = {};
+
+    for(let i=0; i<7; i++) {
+        const ativo = document.getElementById(`dia-${i}-ativo`).checked;
+        this.dados.config.diasTrabalho[i] = {
+            ativo: ativo,
+            inicio: document.getElementById(`dia-${i}-inicio`).value,
+            fim: document.getElementById(`dia-${i}-fim`).value,
+            almocoInicio: document.getElementById(`dia-${i}-almoco-ini`).value,
+            almocoFim: document.getElementById(`dia-${i}-almoco-fim`).value
+        };
+    }
+    
+    this.persistir(); // Salva no LocalStorage e GitHub
+    alert("✅ Horários de funcionamento atualizados!");
+    this.renderView('dash');
+},
     
 
 persistir() {
@@ -33,28 +105,39 @@ persistir() {
     }, 500);
 },
     renderView(view, btn) {
-        if (view === 'add-agenda') {
-            this.prepararNovoAgendamento();
-            return;
-        }
+    if (view === 'add-agenda') {
+        this.prepararNovoAgendamento();
+        return;
+    }
 
-        document.querySelectorAll('.view-section').forEach(s => s.style.display = 'none');
-        const targetView = (view === 'externo') ? 'add-agenda' : view;
-        
-        const viewEl = document.getElementById(`view-${targetView}`);
-        if(viewEl) viewEl.style.display = 'block';
+    document.querySelectorAll('.view-section').forEach(s => s.style.display = 'none');
+    
+    // Define qual ID de seção será exibido
+    const targetView = (view === 'externo') ? 'add-agenda' : view;
+    
+    const viewEl = document.getElementById(`view-${targetView}`);
+    if(viewEl) {
+        viewEl.style.display = 'block';
+        window.scrollTo(0, 0); // Garante que a tela comece no topo
+    }
 
-        const tabBar = document.querySelector('.tab-bar');
-        // Esconde tab bar no histórico ou no externo
-        tabBar.style.display = (view === 'externo' || view === 'historico') ? 'none' : 'flex';
-        
-        if (btn) {
-            document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        }
+    const tabBar = document.querySelector('.tab-bar');
+    // Adicionei 'config' aqui para esconder a barra de baixo quando estiver configurando
+    const esconderAbas = (view === 'externo' || view === 'historico' || view === 'config');
+    tabBar.style.display = esconderAbas ? 'none' : 'flex';
+    
+    if (btn) {
+        document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+    
+    // Dispara a montagem da lista de horários se a view for config
+    if (view === 'config') {
+        this.renderizarConfigHorarios();
+    }
 
-        this.atualizarDadosTela(targetView);
-    },
+    this.atualizarDadosTela(targetView);
+},
 
     atualizarDadosTela(view) {
     if (view === 'dash') this.atualizarDashPorPeriodo('mes'); // Corretoif (view === 'dash') this.renderDash();
@@ -103,12 +186,15 @@ atualizarDashPorPeriodo(periodo) {
     // --- NOVA LÓGICA DE CÁLCULO POR PAGAMENTO ---
     const resumoPg = { pix: 0, dinheiro: 0, credito: 0, debito: 0 };
     
-    filtrados.forEach(item => {
-        // Só contabiliza se for serviço (ignora ajustes se houver)
-        const isServico = item.cliente !== "AJUSTE MANUAL" && item.cliente !== "PAGAMENTO REALIZADO";
-        if (isServico && item.pagamento && resumoPg.hasOwnProperty(item.pagamento)) {
-            resumoPg[item.pagamento] += parseFloat(item.valorBruto || item.valor || 0);
-        }
+   filtrados.forEach(item => {
+    const ehServico = item.servico && item.servico.trim() !== "" && 
+                     item.cliente !== "AJUSTE MANUAL" && 
+                     item.cliente !== "PAGAMENTO REALIZADO";
+
+    if (ehServico && item.pagamento && resumoPg.hasOwnProperty(item.pagamento)) {
+        resumoPg[item.pagamento] += parseFloat(item.valorBruto || item.valor || 0);
+    }
+
     });
 
     // Atualiza os labels do painel expandível se eles existirem na tela
@@ -168,13 +254,17 @@ atualizarInterfaceDash(texto, bruto, liquido, listaFiltrada) {
     });
 
     // 2. Ranking Permanente (Varre TODO o histórico do sistema)
-    const contagemGeral = {};
-    this.dados.historico.forEach(item => {
-        const cli = item.cliente || "";
-        if (cli && !cli.toUpperCase().includes("AJUSTE")) {
-            contagemGeral[cli] = (contagemGeral[cli] || 0) + 1;
-        }
-    });
+   const contagemGeral = {};
+this.dados.historico.forEach(item => {
+    const cli = item.cliente || "";
+    const ehServicoValido = item.servico && item.servico.trim() !== "" && 
+                           cli !== "AJUSTE MANUAL" && 
+                           cli !== "PAGAMENTO REALIZADO";
+
+    if (cli && ehServicoValido) {
+        contagemGeral[cli] = (contagemGeral[cli] || 0) + 1;
+    }
+});
 
     const getMelhor = (obj) => {
         const entries = Object.entries(obj);
@@ -310,6 +400,49 @@ filtrarHistorico() {
     }).join('') || '<p style="text-align:center; padding:20px; color:#666">Sem registros.</p>');
 },
 
+// Retorna apenas horários válidos e livres
+obterHorariosDisponiveis(dataSelecionada, profissionalNome) {
+    const dataObj = new Date(dataSelecionada + 'T00:00:00');
+    const diaSemana = dataObj.getDay();
+    const conf = this.dados.config.diasTrabalho[diaSemana];
+
+    // 1. Se o dia estiver desativado nas configurações, retorna vazio
+    if (!conf || !conf.ativo) return [];
+
+    const horariosLivres = [];
+    let atual = new Date(`2000-01-01T${conf.inicio}:00`);
+    const fim = new Date(`2000-01-01T${conf.fim}:00`);
+    const almocoIni = new Date(`2000-01-01T${conf.almocoInicio}:00`);
+    const almocoFim = new Date(`2000-01-01T${conf.almocoFim}:00`);
+    const intervalo = parseInt(this.dados.config.intervalo) || 30;
+
+    // 2. Loop para gerar horários baseados no intervalo
+    while (atual < fim) {
+        const horaTexto = atual.toTimeString().substring(0, 5);
+        
+        // Regra da Pausa/Almoço (Calculado primeiro por ser mais rápido)
+        const isAlmoco = (atual >= almocoIni && atual < almocoFim);
+        
+        if (!isAlmoco) {
+            // 3. Regra de Concorrência: Consulta o banco de dados
+            const ocupado = this.dados.agenda.some(ag => 
+                ag.data === dataSelecionada && 
+                ag.hora === horaTexto && 
+                (ag.profissional === profissionalNome || ag.prestador === profissionalNome)
+            );
+
+            if (!ocupado) {
+                horariosLivres.push(horaTexto);
+            }
+        }
+        
+        // Incrementa os minutos
+        atual.setMinutes(atual.getMinutes() + intervalo);
+    }
+    
+    return horariosLivres;
+},
+
 prepararNovoAgendamento() {
     const optPrestadores = this.dados.prestadores.map(p => `<option value="${p.nome}">${p.nome}</option>`).join('');
     const optServicos = this.dados.servicos.map(s => `<option value="${s.nome}" data-preco="${s.valor}">${s.nome} - R$ ${s.valor}</option>`).join('');
@@ -331,7 +464,7 @@ prepararNovoAgendamento() {
             <input type="text" id="ag-nome" placeholder="Nome do Cliente">
             
             <label style="font-size:12px; color:#888; display:block; margin-top:10px">Data:</label>
-            <input type="date" id="ag-data" value="${hoje}">
+            <input type="date" id="ag-data" value="${hoje}" onchange="app.atualizarHorariosDisponiveis()">
             
             <label style="font-size:12px; color:#888; display:block; margin-top:10px">Barbeiro:</label>
             <select id="ag-prestador-select" onchange="app.atualizarHorariosDisponiveis()">
@@ -771,24 +904,62 @@ ajustarQtdManual(id, mudanca) {
 
     fecharModal() { document.getElementById('modal-container').style.display = 'none'; },
 
-    atualizarHorariosDisponiveis() {
-        const barbeiro = document.getElementById('ag-prestador-select').value;
-        const data = document.getElementById('ag-data').value;
-        const selectHora = document.getElementById('ag-hora-select');
-        if (!barbeiro || !data) return;
+   atualizarHorariosDisponiveis() {
+    const barbeiro = document.getElementById('ag-prestador-select').value;
+    const dataInput = document.getElementById('ag-data').value;
+    const selectHora = document.getElementById('ag-hora-select');
 
-        let html = '<option value="">Selecione o horário...</option>';
-        const { inicioDia, fimDia, intervalo } = this.dados.config;
-        for (let h = inicioDia; h < fimDia; h++) {
-            for (let m = 0; m < 60; m += intervalo) {
-                const horaFormatada = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-                // Verifica ocupação na data e barbeiro específicos
-                const ocupado = this.dados.agenda.some(a => a.prestador === barbeiro && a.hora === horaFormatada && a.data === data);
-                if (!ocupado) html += `<option value="${horaFormatada}">${horaFormatada}</option>`;
+    if (!barbeiro || !dataInput) {
+        selectHora.innerHTML = '<option value="">Escolha o profissional...</option>';
+        return;
+    }
+
+    // 1. Identifica o dia da semana (0-6)
+    const dataObj = new Date(dataInput + 'T00:00:00');
+    const diaSemana = dataObj.getDay();
+    const conf = this.dados.config.diasTrabalho[diaSemana];
+
+    // 2. Se a barbearia não abre nesse dia, avisa o usuário
+    if (!conf || !conf.ativo) {
+        selectHora.innerHTML = '<option value="">Fechado neste dia</option>';
+        return;
+    }
+
+    let html = '<option value="">Selecione o horário...</option>';
+    
+    // Configurações de horário para o dia específico
+    let atual = new Date(`2000-01-01T${conf.inicio}:00`);
+    const fim = new Date(`2000-01-01T${conf.fim}:00`);
+    const almocoIni = new Date(`2000-01-01T${conf.almocoInicio}:00`);
+    const almocoFim = new Date(`2000-01-01T${conf.almocoFim}:00`);
+    const intervalo = this.dados.config.intervalo || 30;
+
+    // 3. Loop de geração de horários
+    while (atual < fim) {
+        const horaFormatada = atual.toTimeString().substring(0, 5);
+        
+        // Verifica se o horário está dentro da pausa de almoço
+        const estaNoAlmoco = (atual >= almocoIni && atual < almocoFim);
+        
+        if (!estaNoAlmoco) {
+            // Verifica se o barbeiro já tem cliente nesse dia e hora específicos
+            const ocupado = this.dados.agenda.some(a => 
+                (a.prestador === barbeiro || a.profissional === barbeiro) && 
+                a.hora === horaFormatada && 
+                a.data === dataInput
+            );
+
+            if (!ocupado) {
+                html += `<option value="${horaFormatada}">${horaFormatada}</option>`;
             }
         }
-        selectHora.innerHTML = html;
-    },
+        
+        // Incrementa o horário conforme o intervalo configurado
+        atual.setMinutes(atual.getMinutes() + intervalo);
+    }
+
+    selectHora.innerHTML = html;
+},
 
 // Adicione estas funções dentro do objeto app:
 renderListaPrestadores() {
@@ -1282,21 +1453,48 @@ async function configurarCloud() {
         
         if (dadosNuvem) {
             app.dados = dadosNuvem;
-            alert(`Bem-vindo de volta!`);
-        } else {
-            // USUÁRIO NOVO: Estrutura inicial da barbearia
+
+      if (app.dados.config && !app.dados.config.diasTrabalho) {
+    console.log("Atualizando estrutura de horários antiga...");
+    
+    app.dados.config.diasTrabalho = {
+        0: { ativo: false, inicio: "08:00", fim: "18:00", almocoInicio: "12:00", almocoFim: "13:00" },
+        1: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+        2: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+        3: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+        4: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+        5: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+        6: { ativo: true,  inicio: "08:00", fim: "18:00", almocoInicio: "12:00", almocoFim: "13:00" }
+    };
+}
+alert(`Bem-vindo de volta!`);
+        }
+         else {
+            // USUÁRIO NOVO: Estrutura completa com os novos horários
             app.dados = { 
                 usuario: emailInput, 
-                caixa: 0, agenda: [], historico: [], prestadores: [], estoque: [], servicos: [],
-                config: { inicioDia: 8, fimDia: 19, intervalo: 30 }
+                caixa: 0, agenda: [], historico: [], prestadores: [], estoque: [], servicos: [], logsAcertos: [],
+                config: { 
+                    inicioDia: 8, 
+                    fimDia: 19, 
+                    intervalo: 30,
+                    // ADICIONE ISSO:
+                    diasTrabalho: {
+                        0: { ativo: false, inicio: "08:00", fim: "18:00", almocoInicio: "12:00", almocoFim: "13:00" },
+                        1: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+                        2: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+                        3: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+                        4: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+                        5: { ativo: true,  inicio: "08:00", fim: "19:00", almocoInicio: "12:00", almocoFim: "13:00" },
+                        6: { ativo: true,  inicio: "08:00", fim: "18:00", almocoInicio: "12:00", almocoFim: "13:00" }
+                    }
+                }
             };
 
-            // CRIAÇÃO FÍSICA no GitHub
             const sucessoAoCriar = await githubDB.salvar(app.dados);
-            if (!sucessoAoCriar) throw new Error("Erro ao criar banco de dados no GitHub. Verifique o Token.");
-            
-            alert(`Novo banco de dados criado para: ${emailInput}`);
-        }
+            if (!sucessoAoCriar) throw new Error("Erro ao criar banco no GitHub.");
+            alert(`Novo banco criado para: ${emailInput}`);
+        }   
 
         // Salva backup local e recarrega
         localStorage.setItem(`barber_local_db`, JSON.stringify(app.dados));
