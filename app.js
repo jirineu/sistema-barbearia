@@ -26,6 +26,12 @@ renderizarConfigHorarios() {
     const container = document.getElementById('config-horarios-lista');
     if (!container) return; // Segurança caso o elemento não exista
 
+    // 1. Puxa e preenche o telefone salvo no JSON logo no início
+    const inputTelefone = document.getElementById('config-telefone');
+    if (inputTelefone) {
+        inputTelefone.value = (this.dados.config && this.dados.config.telefone) ? this.dados.config.telefone : '';
+    }
+
     const diasNomes = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
     container.innerHTML = '';
 
@@ -67,6 +73,12 @@ salvarConfiguracoesHorario() {
     if (!this.dados.config) this.dados.config = {};
     if (!this.dados.config.diasTrabalho) this.dados.config.diasTrabalho = {};
 
+    // Salva o telefone digitado
+    const telefoneInput = document.getElementById('config-telefone');
+    if (telefoneInput) {
+        this.dados.config.telefone = telefoneInput.value.trim();
+    }
+
     for(let i=0; i<7; i++) {
         const ativo = document.getElementById(`dia-${i}-ativo`).checked;
         this.dados.config.diasTrabalho[i] = {
@@ -78,8 +90,8 @@ salvarConfiguracoesHorario() {
         };
     }
     
-    this.persistir(); // Salva no LocalStorage e GitHub
-    alert("✅ Horários de funcionamento atualizados!");
+    this.persistir(); // Salva automaticamente no LocalStorage e dispara o envio para o GitHub
+    alert("✅ Configurações e telefone atualizados com sucesso!");
     this.renderView('dash');
 },
     
@@ -546,7 +558,7 @@ prepararNovoAgendamento() {
 },
 
 
-   salvarAgenda(acao) {
+salvarAgenda(acao) {
     const params = new URLSearchParams(window.location.search);
     const ehExterno = params.has('agendar');
 
@@ -576,7 +588,7 @@ prepararNovoAgendamento() {
 
     if (cliente && data && prestador && hora && servico) {
         
-        // --- NOVO: LÓGICA DE ABATIMENTO DE ESTOQUE ---
+        // --- LÓGICA DE ABATIMENTO DE ESTOQUE ---
         if (produtoNome) {
             const itemEstoque = this.dados.estoque.find(p => p.nome === produtoNome);
             
@@ -605,50 +617,86 @@ prepararNovoAgendamento() {
         });
 
         if (ehExterno) {
-            // --- AJUSTE AQUI: SALVAMENTO FORÇADO PARA EXTERNO ---
+            // --- SALVAMENTO FORÇADO PARA EXTERNO ---
             localStorage.setItem('barber_local_db', JSON.stringify(this.dados));
             
             console.log("Enviando agendamento para nuvem...");
             
-         githubDB.salvar(this.dados).then(() => {
-    // 1. Salva o link completo (que contém o token) em uma variável temporária
-    const linkReagendamento = window.location.href;
+            githubDB.salvar(this.dados).then(() => {
+                // 1. Salva o link completo (que contém o token) em uma variável temporária
+                const linkReagendamento = window.location.href;
 
-    // 2. PONTO ZERO: Limpa absolutamente tudo do navegador do cliente
-    localStorage.removeItem('barber_auth');
-    localStorage.removeItem('barber_local_db');
-    
-    // Limpa os dados da memória do aplicativo
-    githubDB.creds = null;
-    app.dados.servicos = [];
-    app.dados.prestadores = [];
-    app.dados.agenda = [];
+                // --- GERAÇÃO DO LINK DO WHATSAPP DIRETAMENTE DO JSON ---
+                let telefoneConfig = app.dados.config?.telefone || '';
+                telefoneConfig = telefoneConfig.replace(/\D/g, ''); // Remove caracteres especiais, mantendo só os números
+                
+                const dataFormatadaAmigavel = data.split('-').reverse().join('/');
+                
+                const textoMensagem = encodeURIComponent(
+                    `NOVO AGENDAMENTO CONFIRMADO!\n\n` +
+                    `Cliente: ${cliente}\n` +
+                    `Serviço: ${servico}\n` +
+                    `Barbeiro: ${prestador}\n` +
+                    `Data: ${dataFormatadaAmigavel}\n` +
+                    `Horário: ${hora}\n\n` +
+                    `Obrigado pela preferência! Te aguardamos na barbearia.`
+                );
+                let urlWhatsApp = "";
+                if (telefoneConfig) {
+                    const numeroFinal = telefoneConfig.startsWith('55') ? telefoneConfig : '55' + telefoneConfig;
+                    urlWhatsApp = `https://wa.me/${numeroFinal}?text=${textoMensagem}`;
+                }
+                // ------------------------------------------------------
 
-    this.fecharModal();
+                // 2. PONTO ZERO: Limpa absolutamente tudo do navegador do cliente
+                localStorage.removeItem('barber_auth');
+                localStorage.removeItem('barber_local_db');
+                
+                // Limpa os dados da memória do aplicativo
+                githubDB.creds = null;
+                app.dados.servicos = [];
+                app.dados.prestadores = [];
+                app.dados.agenda = [];
 
-    // 3. EXIBE A MENSAGEM FINAL (TELA LIMPA)
-    document.body.innerHTML = `
-        <div style="height:100vh; background:#0f0f0f; display:flex; justify-content:center; align-items:center; font-family:sans-serif; padding:20px; color:white;">
-            <div style="background:#1a1a1a; padding:40px; border-radius:20px; border:1px solid #D4AF37; text-align:center; max-width:400px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
-                
-                <div style="font-size:60px; color:#D4AF37; margin-bottom:20px;">✓</div>
-                
-                <h2 style="color:#D4AF37; margin-bottom:10px;">Agendamento Confirmado!</h2>
-                
-                <p style="color:#ccc; margin-bottom:30px; line-height:1.6;">
-                    Olá <strong>${cliente}</strong>, seu horário foi reservado com sucesso.<br>
-                    Obrigado pela preferência!
-                </p>
+                this.fecharModal();
 
-                <button onclick="window.location.href='${linkReagendamento}'" 
-                    style="width:100%; padding:18px; background:#D4AF37; border:none; border-radius:12px; font-weight:bold; cursor:pointer; color:black; font-size:16px; transition: 0.3s; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);">
-                    Fazer outro agendamento
-                </button>
-                
-            </div>
-        </div>
-    `;
-});
+                // 3. EXIBE A MENSAGEM FINAL (TELA LIMPA)
+                document.body.innerHTML = `
+                    <div style="height:100vh; background:#0f0f0f; display:flex; justify-content:center; align-items:center; font-family:sans-serif; padding:20px; color:white;">
+                        <div style="background:#1a1a1a; padding:40px; border-radius:20px; border:1px solid #D4AF37; text-align:center; max-width:400px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+                            
+                            <div style="font-size:60px; color:#D4AF37; margin-bottom:20px;">✓</div>
+                            
+                            <h2 style="color:#D4AF37; margin-bottom:10px;">Agendamento Confirmado!</h2>
+                            
+                            <p style="color:#ccc; margin-bottom:30px; line-height:1.6;">
+                                Olá <strong>${cliente}</strong>, seu horário foi reservado com sucesso.<br>
+                                Redirecionando para o WhatsApp...
+                            </p>
+
+                            ${telefoneConfig ? `
+                                <a href="${urlWhatsApp}" target="_blank" 
+                                    style="display:block; width:100%; box-sizing:border-box; padding:18px; background:#25D366; border:none; border-radius:12px; font-weight:bold; cursor:pointer; color:white; font-size:16px; text-decoration:none; margin-bottom: 15px; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.3);">
+                                    💬 Abrir WhatsApp Agora
+                                </a>
+                            ` : ''}
+
+                            <button onclick="window.location.href='${linkReagendamento}'" 
+                                style="width:100%; padding:14px; background:transparent; border:1px solid #D4AF37; border-radius:12px; font-weight:bold; cursor:pointer; color:#D4AF37; font-size:14px;">
+                                Fazer outro agendamento
+                            </button>
+                            
+                        </div>
+                    </div>
+                `;
+
+                // Dispara instantaneamente a abertura do WhatsApp se o telefone estiver preenchido no JSON
+                if (telefoneConfig) {
+                    setTimeout(() => {
+                        window.location.href = urlWhatsApp;
+                    }, 400);
+                }
+            });
             
             return; 
         }
