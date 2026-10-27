@@ -138,12 +138,13 @@
         </div>
     </div>
 </section>
-   <section id="view-agenda" class="view-section" style="display:none">
+<section id="view-agenda" class="view-section" style="display:none">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
         <h3 style="margin:0">Agenda Geral</h3>
         <div style="display:flex; gap:5px">
             <button class="btn-small" onclick="app.renderView('add-agenda')" style="background:var(--accent); color:black; font-weight:bold">+ Novo</button>
             <button class="btn-small" style="background:#333; color:white" onclick="app.renderView('historico')">📜 Histórico</button>
+            <button class="btn-small" style="background:#333; color:var(--accent)" onclick="app.renderView('especiais')">⭐ Especiais</button>
             <button class="btn-small" style="background:#333; color:white" onclick="app.compartilharLink()">🔗 Link</button>
         </div>
     </div>
@@ -155,6 +156,30 @@
     </div>
 
     <div class="lista-box" id="lista-agenda-content"></div>
+</section>
+<section id="view-especiais" class="view-section" style="display:none; flex-direction: column; height: 90vh;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding: 15px; border-bottom: 1px solid #333;">
+        <h3 style="margin:0; color: var(--accent);">⭐ Clientes Especiais (Horários Fixos)</h3>
+        <button class="btn-small" style="background: var(--accent); color: black; font-weight: bold;" onclick="app.prepararNovoClienteEspecial()">+ Novo Especial</button>
+    </div>
+
+    <!-- Filtro discreto solicitado -->
+    <div style="padding: 10px 15px; background: #111; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222;">
+        <span style="font-size: 12px; color: #888;">Filtrar por Status:</span>
+       <select id="filtro-status-especial" onchange="app.renderListaEspeciais()" style="background: #222; color: white; border: 1px solid #444; padding: 5px 10px; border-radius: 5px; font-size: 12px;">
+    <option value="ativos" selected>Apenas Ativos</option>
+    <option value="todos">Todos os Registros</option>
+</select>
+    </div>
+
+    <!-- Lista onde aparecerão todos os dias e horários fixos ativos -->
+    <div id="lista-especiais-content" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+        <!-- Preenchido via JavaScript -->
+    </div>
+
+    <div style="padding: 15px; border-top: 1px solid #333; background: var(--bg-card);">
+        <button onclick="app.renderView('dash')" class="btn-primary" style="width: 100%; background: #333; color: white;">Voltar ao Início</button>
+    </div>
 </section>
         <section id="view-historico" class="view-section" style="display:none">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
