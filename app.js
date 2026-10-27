@@ -21,17 +21,256 @@ config: {
     intervalo: 30 // minutos entre cada horário na agenda
 }
     },
+
+    // Atualiza a listagem de telas na navegação
+atualizarDadosTela(view) {
+    if (view === 'dash') this.atualizarDashPorPeriodo('mes');
+    if (view === 'agenda') this.filtrarLista('agenda', '');
+    if (view === 'historico') this.filtrarHistorico();
+    if (view === 'servicos') this.filtrarLista('servicos', '');
+    if (view === 'estoque') this.filtrarLista('estoque', '');
+    if (view === 'prestadores') this.renderListaPrestadores();
+    if (view === 'especiais') this.renderListaEspeciais(); // <-- Adicionado aqui
+},
+
+// Abre o Modal para Cadastrar Cliente Especial
+prepararNovoClienteEspecial() {
+    const optPrestadores = this.dados.prestadores.map(p => `<option value="${p.nome}">${p.nome}</option>`).join('');
+    const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+    const optDias = diasSemana.map((d, index) => `<option value="${index}">${d}</option>`).join('');
+    const hoje = new Date().toISOString().split('T')[0];
+
+    const html = `
+        <label style="font-size:12px; color:#888">Nome do Cliente Especial:</label>
+        <input type="text" id="esp-nome" class="input-field" placeholder="Ex: Cliente VIP">
+
+        <label style="font-size:12px; color:#888; margin-top:10px; display:block">Barbeiro Responsável:</label>
+        <select id="esp-prestador" class="input-field" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+            ${optPrestadores}
+        </select>
+
+        <label style="font-size:12px; color:#888; margin-top:10px; display:block">Dia da Semana Fixo:</label>
+        <select id="esp-diasequencia" class="input-field" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+            ${optDias}
+        </select>
+
+        <label style="font-size:12px; color:#888; margin-top:10px; display:block">Horário Fixo:</label>
+        <input type="time" id="esp-hora" class="input-field" value="10:00" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+
+        <label style="font-size:12px; color:#888; margin-top:10px; display:block">Data de Início:</label>
+        <input type="date" id="esp-datainicio" class="input-field" value="${hoje}" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+
+        <label style="font-size:12px; color:#888; margin-top:10px; display:block">Validade / Término:</label>
+        <select id="esp-tipofim" class="input-field" onchange="app.alternarTipoFimEspecial()" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px; margin-bottom:10px;">
+            <option value="infinita">Data Infinita (Sem prazo de validade)</option>
+            <option value="definida">Data de Término Específica</option>
+        </select>
+
+        <div id="div-data-fim" style="display:none;">
+            <label style="font-size:12px; color:#888; display:block">Data de Término:</label>
+            <input type="date" id="esp-datafim" class="input-field" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+        </div>
+
+        <button class="btn-primary" style="margin-top:20px; background:var(--accent); color:black; font-weight:bold;" onclick="app.salvarClienteEspecial()">Salvar Cliente Especial</button>
+        <button class="btn-primary" style="background:#333; margin-top:5px;" onclick="app.fecharModal()">Cancelar</button>
+    `;
+
+    this.abrirModalForm("Novo Cliente Especial", html);
+},
+
+alternarTipoFimEspecial() {
+    const tipo = document.getElementById('esp-tipofim').value;
+    const divFim = document.getElementById('div-data-fim');
+    divFim.style.display = (tipo === 'definida') ? 'block' : 'none';
+},
+
+salvarClienteEspecial() {
+        const idInput = document.getElementById('esp-id')?.value;
+        const nome = document.getElementById('esp-nome').value.trim();
+        const prestador = document.getElementById('esp-prestador').value;
+        const diaSemana = document.getElementById('esp-diasequencia').value;
+        const hora = document.getElementById('esp-hora').value;
+        const dataInicio = document.getElementById('esp-datainicio').value;
+        const tipoFim = document.getElementById('esp-tipofim').value;
+        const dataFim = tipoFim === 'definida' ? document.getElementById('esp-datafim').value : null;
+
+        if (!nome || !hora || !dataInicio) {
+            alert("Preencha os campos obrigatórios!");
+            return;
+        }
+
+        if (!this.dados.clientesEspeciais) {
+            this.dados.clientesEspeciais = [];
+        }
+
+        if (idInput) {
+            const index = this.dados.clientesEspeciais.findIndex(ce => ce.id == idInput);
+            if (index !== -1) {
+                // Mantém o status 'ativo' atual que ele já possuía
+                const statusAtual = this.dados.clientesEspeciais[index].hasOwnProperty('ativo') ? this.dados.clientesEspeciais[index].ativo : true;
+                this.dados.clientesEspeciais[index] = {
+                    id: parseInt(idInput),
+                    nome,
+                    prestador,
+                    diaSemana,
+                    hora,
+                    dataInicio,
+                    tipoFim,
+                    dataFim,
+                    ativo: statusAtual
+                };
+            }
+            alert("⭐ Cliente Especial atualizado com sucesso!");
+        } else {
+            this.dados.clientesEspeciais.push({
+                id: Date.now(),
+                nome,
+                prestador,
+                diaSemana,
+                hora,
+                dataInicio,
+                tipoFim,
+                dataFim,
+                ativo: true // Começa ativo por padrão
+            });
+            alert("⭐ Cliente Especial cadastrado com sucesso! Horário travado na agenda.");
+        }
+
+        this.persistir();
+        this.fecharModal();
+        this.renderListaEspeciais();
+    },
+alternarStatusClienteEspecial(id) {
+        const ce = (this.dados.clientesEspeciais || []).find(x => x.id === id);
+        if (!ce) return;
+
+        // Se 'ativo' não estiver definido, assume true, e inverte
+        const estadoAtual = ce.hasOwnProperty('ativo') ? ce.ativo : true;
+        ce.ativo = !estadoAtual;
+
+        this.persistir();
+        this.renderListaEspeciais();
+
+        const msg = ce.ativo ? "Cliente ativado com sucesso! Horário travado novamente." : "Cliente desativado! O horário foi liberado para novos agendamentos.";
+        alert(msg);
+    },
+// Renderiza a lista discreta com todos os dias e horários ativos
+renderListaEspeciais() {
+        const container = document.getElementById('lista-especiais-content');
+        if (!container) return;
+
+        // Força a leitura para 'ativos' caso o elemento venha vazio ou não carregado
+        const selectFiltro = document.getElementById('filtro-status-especial');
+        const filtroStatus = selectFiltro ? selectFiltro.value : 'ativos';
+        
+        const diasNomes = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+        const hojeStr = new Date().toISOString().split('T')[0];
+
+        let lista = [...(this.dados.clientesEspeciais || [])];
+
+        // Filtro da aba (Ativos vs Todos)
+        if (filtroStatus === 'ativos') {
+            lista = lista.filter(ce => {
+                const estaAtivo = ce.hasOwnProperty('ativo') ? ce.ativo : true;
+                if (!estaAtivo) return false; // Se estiver desativado, esconde no modo "ativos"
+
+                if (ce.tipoFim === 'definida' && ce.dataFim && ce.dataFim < hojeStr) {
+                    return false; // Exclui vencidos
+                }
+                return true;
+            });
+        }
+
+        container.innerHTML = lista.map(ce => {
+            const nomeDia = diasNomes[ce.diaSemana] || '---';
+            const validadeTexto = ce.tipoFim === 'infinita' ? 'Indefinido (Infinito)' : `Até ${ce.dataFim ? ce.dataFim.split('-').reverse().join('/') : '---'}`;
+            const estaAtivo = ce.hasOwnProperty('ativo') ? ce.ativo : true;
+
+            const corBorda = estaAtivo ? 'var(--accent)' : '#555';
+            const textoStatus = estaAtivo ? '<span style="color:var(--success); font-weight:bold;">• ATIVO</span>' : '<span style="color:#888; font-weight:bold;">• DESATIVADO (Horário Livre)</span>';
+            const textoBotaoAtivo = estaAtivo ? 'Desativar' : 'Ativar';
+            const corBotaoAtivo = estaAtivo ? '#856404' : '#155724'; 
+
+            return `
+                <div class="item-list" style="background: #1a1a1a; padding: 12px; border-radius: 8px; border-left: 4px solid ${corBorda}; display: flex; justify-content: space-between; align-items: center; opacity: ${estaAtivo ? '1' : '0.7'};">
+                    <div>
+                        <strong style="color: white; font-size: 14px;">⭐ ${ce.nome}</strong> ${textoStatus}<br>
+                        <small style="color: ${estaAtivo ? 'var(--accent)' : '#888'}; font-weight: bold;">📅 Toda ${nomeDia} às ${ce.hora}</small><br>
+                        <small style="color: #888; font-size: 11px;">Barbeiro: ${ce.prestador} | Validade: ${validadeTexto}</small>
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button class="btn-small" style="background: ${corBotaoAtivo}; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer;" onclick="app.alternarStatusClienteEspecial(${ce.id})">${textoBotaoAtivo}</button>
+                        <button class="btn-small" style="background: #333; color: white; border: 1px solid #555; padding: 6px 10px; border-radius: 5px; cursor: pointer;" onclick="app.prepararEdicaoClienteEspecial(${ce.id})">✏️ Editar</button>
+                        <button class="btn-small" style="background: #b30000; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer;" onclick="app.excluirClienteEspecial(${ce.id})">Excluir</button>
+                    </div>
+                </div>
+            `;
+        }).join('') || '<p style="text-align:center; padding:20px; color:#666">Nenhum cliente especial encontrado.</p>';
+    },
+prepararEdicaoClienteEspecial(id) {
+        const ce = (this.dados.clientesEspeciais || []).find(x => x.id === id);
+        if (!ce) return;
+
+        const optPrestadores = this.dados.prestadores.map(p => `<option value="${p.nome}" ${p.nome === ce.prestador ? 'selected' : ''}>${p.nome}</option>`).join('');
+        const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+        const optDias = diasSemana.map((d, index) => `<option value="${index}" ${index == ce.diaSemana ? 'selected' : ''}>${d}</option>`).join('');
+        
+        const html = `
+            <input type="hidden" id="esp-id" value="${ce.id}">
+            
+            <label style="font-size:12px; color:#888">Nome do Cliente Especial:</label>
+            <input type="text" id="esp-nome" class="input-field" value="${ce.nome}" placeholder="Ex: Cliente VIP">
+
+            <label style="font-size:12px; color:#888; margin-top:10px; display:block">Barbeiro Responsável:</label>
+            <select id="esp-prestador" class="input-field" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+                ${optPrestadores}
+            </select>
+
+            <label style="font-size:12px; color:#888; margin-top:10px; display:block">Dia da Semana Fixo:</label>
+            <select id="esp-diasequencia" class="input-field" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+                ${optDias}
+            </select>
+
+            <label style="font-size:12px; color:#888; margin-top:10px; display:block">Horário Fixo:</label>
+            <input type="time" id="esp-hora" class="input-field" value="${ce.hora}" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+
+            <label style="font-size:12px; color:#888; margin-top:10px; display:block">Data de Início:</label>
+            <input type="date" id="esp-datainicio" class="input-field" value="${ce.dataInicio}" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+
+            <label style="font-size:12px; color:#888; margin-top:10px; display:block">Validade / Término:</label>
+            <select id="esp-tipofim" class="input-field" onchange="app.alternarTipoFimEspecial()" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px; margin-bottom:10px;">
+                <option value="infinita" ${ce.tipoFim === 'infinita' ? 'selected' : ''}>Data Infinita (Sem prazo de validade)</option>
+                <option value="definida" ${ce.tipoFim === 'definida' ? 'selected' : ''}>Data de Término Específica</option>
+            </select>
+
+            <div id="div-data-fim" style="display: ${ce.tipoFim === 'definida' ? 'block' : 'none'};">
+                <label style="font-size:12px; color:#888; display:block">Data de Término:</label>
+                <input type="date" id="esp-datafim" class="input-field" value="${ce.dataFim || ''}" style="width:100%; background:#000; color:white; border:1px solid #444; padding:10px; border-radius:8px;">
+            </div>
+
+            <button class="btn-primary" style="margin-top:20px; background:var(--accent); color:black; font-weight:bold;" onclick="app.salvarClienteEspecial()">Atualizar Cliente Especial</button>
+            <button class="btn-primary" style="background:#333; margin-top:5px;" onclick="app.fecharModal()">Cancelar</button>
+        `;
+
+        this.abrirModalForm("Editar Cliente Especial", html);
+    },
+excluirClienteEspecial(id) {
+    if (confirm("Deseja remover este cliente especial? O horário voltará a ficar livre para novos agendamentos.")) {
+        this.dados.clientesEspeciais = (this.dados.clientesEspeciais || []).filter(ce => ce.id !== id);
+        this.persistir();
+        this.renderListaEspeciais();
+    }
+},
 // Renderiza a lista de dias na tela de configurações
 renderizarConfigHorarios() {
     const container = document.getElementById('config-horarios-lista');
     if (!container) return; // Segurança caso o elemento não exista
 
-    // 1. Puxa e preenche o telefone salvo no JSON logo no início
+   // --- PUXA O TELEFONE SALVO NO JSON PARA O INPUT DA TELA ---
     const inputTelefone = document.getElementById('config-telefone');
     if (inputTelefone) {
         inputTelefone.value = (this.dados.config && this.dados.config.telefone) ? this.dados.config.telefone : '';
     }
-
     const diasNomes = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
     container.innerHTML = '';
 
@@ -73,7 +312,7 @@ salvarConfiguracoesHorario() {
     if (!this.dados.config) this.dados.config = {};
     if (!this.dados.config.diasTrabalho) this.dados.config.diasTrabalho = {};
 
-    // Salva o telefone digitado
+    // --- SALVA O TELEFONE DIGITADO NO PAINEL DE CONFIGURAÇÕES ---
     const telefoneInput = document.getElementById('config-telefone');
     if (telefoneInput) {
         this.dados.config.telefone = telefoneInput.value.trim();
@@ -90,7 +329,7 @@ salvarConfiguracoesHorario() {
         };
     }
     
-    this.persistir(); // Salva automaticamente no LocalStorage e dispara o envio para o GitHub
+    this.persistir(); // Salva no LocalStorage e envia automaticamente para o GitHub!
     alert("✅ Configurações e telefone atualizados com sucesso!");
     this.renderView('dash');
 },
@@ -116,7 +355,7 @@ persistir() {
         }
     }, 500);
 },
-    renderView(view, btn) {
+renderView(view, btn) {
     if (view === 'add-agenda') {
         this.prepararNovoAgendamento();
         return;
@@ -136,7 +375,7 @@ persistir() {
     const tabBar = document.querySelector('.tab-bar');
     // Adicionei 'config' aqui para esconder a barra de baixo quando estiver configurando
     const esconderAbas = (view === 'externo' || view === 'historico' || view === 'config');
-    tabBar.style.display = esconderAbas ? 'none' : 'flex';
+    if (tabBar) tabBar.style.display = esconderAbas ? 'none' : 'flex';
     
     if (btn) {
         document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
@@ -146,6 +385,16 @@ persistir() {
     // Dispara a montagem da lista de horários se a view for config
     if (view === 'config') {
         this.renderizarConfigHorarios();
+    }
+
+    // --- FORÇA O FILTRO PARA "ATIVOS" E RENDERIZA IMEDIATAMENTE NA ABA ESPECIAIS ---
+    if (view === 'especiais') {
+        const selectFiltro = document.getElementById('filtro-status-especial');
+        if (selectFiltro) {
+            selectFiltro.value = 'ativos';
+        }
+        this.renderListaEspeciais();
+        return; // Sai da função para evitar conflitos com atualizarDadosTela
     }
 
     this.atualizarDadosTela(targetView);
@@ -415,10 +664,9 @@ filtrarHistorico() {
 // Retorna apenas horários válidos e livres
 obterHorariosDisponiveis(dataSelecionada, profissionalNome) {
     const dataObj = new Date(dataSelecionada + 'T00:00:00');
-    const diaSemana = dataObj.getDay();
+    const diaSemana = dataObj.getDay(); // 0 = Domingo, 1 = Segunda...
     const conf = this.dados.config.diasTrabalho[diaSemana];
 
-    // 1. Se o dia estiver desativado nas configurações, retorna vazio
     if (!conf || !conf.ativo) return [];
 
     const horariosLivres = [];
@@ -428,27 +676,40 @@ obterHorariosDisponiveis(dataSelecionada, profissionalNome) {
     const almocoFim = new Date(`2000-01-01T${conf.almocoFim}:00`);
     const intervalo = parseInt(this.dados.config.intervalo) || 30;
 
-    // 2. Loop para gerar horários baseados no intervalo
     while (atual < fim) {
         const horaTexto = atual.toTimeString().substring(0, 5);
-        
-        // Regra da Pausa/Almoço (Calculado primeiro por ser mais rápido)
         const isAlmoco = (atual >= almocoIni && atual < almocoFim);
         
         if (!isAlmoco) {
-            // 3. Regra de Concorrência: Consulta o banco de dados
-            const ocupado = this.dados.agenda.some(ag => 
+            // 1. Verifica conflito com agendamentos normais
+            const ocupadoAgenda = this.dados.agenda.some(ag => 
                 ag.data === dataSelecionada && 
                 ag.hora === horaTexto && 
                 (ag.profissional === profissionalNome || ag.prestador === profissionalNome)
             );
 
-            if (!ocupado) {
+            // 2. NOVO: Verifica conflito com CLIENTES ESPECIAIS (Recorrentes)
+            const ocupadoEspecial = (this.dados.clientesEspeciais || []).some(ce => {
+                // Se estiver explicitamente desativado, não trava o horário
+                const estaAtivo = ce.hasOwnProperty('ativo') ? ce.ativo : true;
+                if (!estaAtivo) return false;
+
+                const mesmoProfissional = !ce.prestador || ce.prestador === profissionalNome;
+                if (!mesmoProfissional) return false;
+
+                if (parseInt(ce.diaSemana) !== diaSemana) return false;
+                if (ce.hora !== horaTexto) return false;
+
+                const dataInicioValida = dataSelecionada >= ce.dataInicio;
+                const dataFimValida = ce.tipoFim === 'infinita' || (ce.dataFim && dataSelecionada <= ce.dataFim);
+
+                return dataInicioValida && dataFimValida;
+            });
+            if (!ocupadoAgenda && !ocupadoEspecial) {
                 horariosLivres.push(horaTexto);
             }
         }
         
-        // Incrementa os minutos
         atual.setMinutes(atual.getMinutes() + intervalo);
     }
     
@@ -845,7 +1106,7 @@ finalizarPagamento(id) {
 },
     // --- FUNÇÕES DE APOIO (MANTIDAS) ---
 filtrarLista(tipo, termo) {
-    const termoBusca = termo.toLowerCase();
+    const termoBusca = (termo || "").toLowerCase();
 
     // --- BLOCO DE SERVIÇOS ---
     if (tipo === 'servicos') {
@@ -864,64 +1125,120 @@ filtrarLista(tipo, termo) {
     }
 
     // --- BLOCO DE ESTOQUE ---
-   // --- BLOCO DE ESTOQUE ATUALIZADO ---
-if (tipo === 'estoque') {
-    const container = document.getElementById('lista-estoque-content');
-    if (!container) return;
-    const filtrados = (this.dados.estoque || []).filter(e => e.nome.toLowerCase().includes(termoBusca));
-    
-    container.innerHTML = filtrados.map(e => {
-        const venda = parseFloat(e.precoVenda || e.preco || 0);
-        const qtd = parseInt(e.qtd || 0);
-        return `
-            <div class="item-list" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${qtd > 0 ? 'var(--success)' : 'var(--danger)'}">
-                <div style="flex:1">
-                    <strong style="color:white">${e.nome}</strong><br>
-                    <small style="color:#888">Qtd: <b style="color:${qtd > 0 ? 'white' : 'var(--danger)'}">${qtd}</b> | Venda: R$ ${venda.toFixed(2)}</small>
-                </div>
-                
-                <div style="display:flex; gap:8px; align-items:center">
-                    <button class="btn-small" style="background:#333; color:var(--danger); font-size:18px; width:35px" 
-                            onclick="app.ajustarQtdManual(${e.id}, -1)">−</button>
+    if (tipo === 'estoque') {
+        const container = document.getElementById('lista-estoque-content');
+        if (!container) return;
+        const filtrados = (this.dados.estoque || []).filter(e => e.nome.toLowerCase().includes(termoBusca));
+        
+        container.innerHTML = filtrados.map(e => {
+            const venda = parseFloat(e.precoVenda || e.preco || 0);
+            const qtd = parseInt(e.qtd || 0);
+            return `
+                <div class="item-list" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${qtd > 0 ? 'var(--success)' : 'var(--danger)'}">
+                    <div style="flex:1">
+                        <strong style="color:white">${e.nome}</strong><br>
+                        <small style="color:#888">Qtd: <b style="color:${qtd > 0 ? 'white' : 'var(--danger)'}">${qtd}</b> | Venda: R$ ${venda.toFixed(2)}</small>
+                    </div>
                     
-                    <button class="btn-small" style="background:#333; color:var(--success); font-size:18px; width:35px" 
-                            onclick="app.ajustarQtdManual(${e.id}, 1)">+</button>
-                    
-                    <button class="btn-small" style="background:#444; color:white; margin-left:5px" 
-                            onclick="app.prepararEdicaoEstoque(${e.id})">✏️</button>
+                    <div style="display:flex; gap:8px; align-items:center">
+                        <button class="btn-small" style="background:#333; color:var(--danger); font-size:18px; width:35px" 
+                                onclick="app.ajustarQtdManual(${e.id}, -1)">−</button>
+                        
+                        <button class="btn-small" style="background:#333; color:var(--success); font-size:18px; width:35px" 
+                                onclick="app.ajustarQtdManual(${e.id}, 1)">+</button>
+                        
+                        <button class="btn-small" style="background:#444; color:white; margin-left:5px" 
+                                onclick="app.prepararEdicaoEstoque(${e.id})">✏️</button>
+                    </div>
                 </div>
-            </div>
-        `;
-    }).join('') || '<p style="text-align:center; padding:10px; color:#666">Estoque vazio.</p>';
-}
-    // --- BLOCO DE AGENDA (O que estava faltando) ---
-   if (tipo === 'agenda') {
+            `;
+        }).join('') || '<p style="text-align:center; padding:10px; color:#666">Estoque vazio.</p>';
+    }
+
+    // --- BLOCO DE AGENDA (Com Agendamentos Normais + Clientes Especiais dos Próximos 7 Dias) ---
+    if (tipo === 'agenda') {
         const container = document.getElementById('lista-agenda-content');
         if (!container) return;
 
-        const filtrados = (this.dados.agenda || []).filter(a => {
-            // Agora filtra apenas pelo termo de busca (nome do cliente ou prestador)
-            return a.cliente.toLowerCase().includes(termoBusca) || 
-                   a.prestador.toLowerCase().includes(termoBusca);
+        let listaAgendamentos = [...(this.dados.agenda || [])];
+
+        // Projeção dos Clientes Especiais para os próximos 7 dias
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        
+        const daqui7Dias = new Date(hoje);
+        daqui7Dias.setDate(hoje.getDate() + 7);
+
+        const clientesEspeciais = this.dados.clientesEspeciais || [];
+        
+        for (let d = new Date(hoje); d <= daqui7Dias; d.setDate(d.getDate() + 1)) {
+            const dataIso = d.toISOString().split('T')[0];
+            const diaSemana = d.getDay(); 
+
+            clientesEspeciais.forEach(ce => {
+                if (parseInt(ce.diaSemana) !== diaSemana) return;
+
+                const dataInicioValida = dataIso >= ce.dataInicio;
+                const dataFimValida = ce.tipoFim === 'infinita' || (ce.dataFim && dataIso <= ce.dataFim);
+
+                if (dataInicioValida && dataFimValida) {
+                    listaAgendamentos.push({
+                        id: `especial_${ce.id}_${dataIso}`,
+                        cliente: `⭐ [Fixo] ${ce.nome}`,
+                        data: dataIso,
+                        hora: ce.hora,
+                        prestador: ce.prestador,
+                        servico: 'Cliente Especial (Horário Fixo)',
+                        valor: 0,
+                        isEspecial: true
+                    });
+                }
+            });
+        }
+
+        const filtrados = listaAgendamentos.filter(a => {
+            return (a.cliente && a.cliente.toLowerCase().includes(termoBusca)) || 
+                   (a.prestador && a.prestador.toLowerCase().includes(termoBusca));
         });
 
-        // Ordena por data e depois por hora para não ficar bagunçado
+        // Ordena por data e depois por hora
         filtrados.sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
 
-        container.innerHTML = filtrados.map(a => `
-            <div class="item-list" style="border-left: 4px solid var(--accent); margin-bottom: 8px; background: #1a1a1a; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <strong style="font-size:16px; color:white">${a.data.split('-').reverse().join('/')} - ${a.hora}</strong><br>
-                    <span style="color:white; font-weight:bold">${a.cliente}</span><br>
-                    <small style="color:var(--accent)">✂️ ${a.servico}</small>
+        container.innerHTML = filtrados.map(a => {
+            const dataFormatada = a.data ? a.data.split('-').reverse().join('/') : '---';
+            
+            // Renderização diferenciada para Clientes Especiais (Fixo)
+            if (a.isEspecial) {
+                return `
+                    <div class="item-list" style="border-left: 4px solid var(--accent); margin-bottom: 8px; background: #1f1a10; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size:16px; color:var(--accent)">${dataFormatada} - ${a.hora}</strong><br>
+                            <span style="color:white; font-weight:bold">${a.cliente}</span><br>
+                            <small style="color:#aaa">Barbeiro: ${a.prestador} | Recorrente Fixo</small>
+                        </div>
+                        <div style="text-align:right">
+                            <span style="font-size:11px; background:var(--accent); color:black; padding:4px 8px; border-radius:4px; font-weight:bold;">FIXO</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Renderização padrão para agendamentos comuns
+            return `
+                <div class="item-list" style="border-left: 4px solid var(--success); margin-bottom: 8px; background: #1a1a1a; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="font-size:16px; color:white">${dataFormatada} - ${a.hora}</strong><br>
+                        <span style="color:white; font-weight:bold">${a.cliente}</span><br>
+                        <small style="color:var(--accent)">✂️ ${a.servico || ''}</small>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-weight:bold; color:var(--success); margin-bottom:5px">R$ ${parseFloat(a.valor || 0).toFixed(2)}</div>
+                        <button class="btn-small" style="background:var(--success); color:black; font-weight:bold; border:none; padding:8px 12px; border-radius:5px; cursor:pointer" 
+                                onclick="app.abrirCheckout(${a.id})">FINALIZAR</button>
+                    </div>
                 </div>
-                <div style="text-align:right">
-                    <div style="font-weight:bold; color:var(--success); margin-bottom:5px">R$ ${parseFloat(a.valor || 0).toFixed(2)}</div>
-                    <button class="btn-small" style="background:var(--success); color:black; font-weight:bold; border:none; padding:8px 12px; border-radius:5px; cursor:pointer" 
-                            onclick="app.abrirCheckout(${a.id})">FINALIZAR</button>
-                </div>
-            </div>
-        `).join('') || `<p style="text-align:center; padding:20px; color:#666">Nenhum agendamento encontrado.</p>`;
+            `;
+        }).join('') || `<p style="text-align:center; padding:20px; color:#666">Nenhum agendamento encontrado para os próximos 7 dias.</p>`;
     }
 },
 ajustarQtdManual(id, mudanca) {
@@ -952,62 +1269,31 @@ ajustarQtdManual(id, mudanca) {
 
     fecharModal() { document.getElementById('modal-container').style.display = 'none'; },
 
-   atualizarHorariosDisponiveis() {
-    const barbeiro = document.getElementById('ag-prestador-select').value;
-    const dataInput = document.getElementById('ag-data').value;
-    const selectHora = document.getElementById('ag-hora-select');
+atualizarHorariosDisponiveis() {
+        const barbeiro = document.getElementById('ag-prestador-select').value;
+        const dataInput = document.getElementById('ag-data').value;
+        const selectHora = document.getElementById('ag-hora-select');
 
-    if (!barbeiro || !dataInput) {
-        selectHora.innerHTML = '<option value="">Escolha o profissional...</option>';
-        return;
-    }
-
-    // 1. Identifica o dia da semana (0-6)
-    const dataObj = new Date(dataInput + 'T00:00:00');
-    const diaSemana = dataObj.getDay();
-    const conf = this.dados.config.diasTrabalho[diaSemana];
-
-    // 2. Se a barbearia não abre nesse dia, avisa o usuário
-    if (!conf || !conf.ativo) {
-        selectHora.innerHTML = '<option value="">Fechado neste dia</option>';
-        return;
-    }
-
-    let html = '<option value="">Selecione o horário...</option>';
-    
-    // Configurações de horário para o dia específico
-    let atual = new Date(`2000-01-01T${conf.inicio}:00`);
-    const fim = new Date(`2000-01-01T${conf.fim}:00`);
-    const almocoIni = new Date(`2000-01-01T${conf.almocoInicio}:00`);
-    const almocoFim = new Date(`2000-01-01T${conf.almocoFim}:00`);
-    const intervalo = this.dados.config.intervalo || 30;
-
-    // 3. Loop de geração de horários
-    while (atual < fim) {
-        const horaFormatada = atual.toTimeString().substring(0, 5);
-        
-        // Verifica se o horário está dentro da pausa de almoço
-        const estaNoAlmoco = (atual >= almocoIni && atual < almocoFim);
-        
-        if (!estaNoAlmoco) {
-            // Verifica se o barbeiro já tem cliente nesse dia e hora específicos
-            const ocupado = this.dados.agenda.some(a => 
-                (a.prestador === barbeiro || a.profissional === barbeiro) && 
-                a.hora === horaFormatada && 
-                a.data === dataInput
-            );
-
-            if (!ocupado) {
-                html += `<option value="${horaFormatada}">${horaFormatada}</option>`;
-            }
+        if (!barbeiro || !dataInput) {
+            selectHora.innerHTML = '<option value="">Escolha o profissional...</option>';
+            return;
         }
-        
-        // Incrementa o horário conforme o intervalo configurado
-        atual.setMinutes(atual.getMinutes() + intervalo);
-    }
 
-    selectHora.innerHTML = html;
-},
+        // Chama a função centralizada que já valida dia útil, almoço, agenda E clientes especiais!
+        const horariosLivres = this.obterHorariosDisponiveis(dataInput, barbeiro);
+
+        if (horariosLivres.length === 0) {
+            selectHora.innerHTML = '<option value="">Fechado ou sem horários livres neste dia</option>';
+            return;
+        }
+
+        let html = '<option value="">Selecione o horário...</option>';
+        horariosLivres.forEach(horaFormatada => {
+            html += `<option value="${horaFormatada}">${horaFormatada}</option>`;
+        });
+
+        selectHora.innerHTML = html;
+    },
 
 // Adicione estas funções dentro do objeto app:
 renderListaPrestadores() {
@@ -1363,6 +1649,7 @@ salvarServico() {
         alert("Item excluído com sucesso!");
     }
 },
+
 compartilharLink() {
     try {
         // Pega as credenciais que você usou para logar
@@ -1642,10 +1929,10 @@ window.onload = async () => {
         }
     }
 
-    // 4. Garante estrutura mínima
+    // 4. Garante estrutura mínima (Incluindo clientesEspeciais)
     const padrao = { 
         usuario: credencial.userEmail, 
-        servicos: [], prestadores: [], agenda: [], estoque: [], caixa: 0, historico: [],
+        servicos: [], prestadores: [], agenda: [], estoque: [], caixa: 0, historico: [], clientesEspeciais: [],
         config: { inicioDia: 8, fimDia: 19, intervalo: 30 }
     };
     app.dados = { ...padrao, ...app.dados };
@@ -1657,7 +1944,7 @@ window.onload = async () => {
 
     // Lógica visual para esconder menus se for cliente
     if (params.has('agendar')) {
-        const esconder = ['.tab-bar', '.mobile-header', '#view-dash', '.admin-only', '#auth-screen'];
+        const esconder = ['.tab-bar', '.mobile-header', '#view-dash', '#view-especiais', '.admin-only', '#auth-screen'];
         esconder.forEach(s => { 
             const el = document.querySelector(s); 
             if (el) el.style.display = 'none'; 
