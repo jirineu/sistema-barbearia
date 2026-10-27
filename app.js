@@ -183,26 +183,46 @@ renderListaEspeciais() {
 
         container.innerHTML = lista.map(ce => {
             const nomeDia = diasNomes[ce.diaSemana] || '---';
-            const validadeTexto = ce.tipoFim === 'infinita' ? 'Indefinido (Infinito)' : `Até ${ce.dataFim ? ce.dataFim.split('-').reverse().join('/') : '---'}`;
+            
+            // Formatação do texto de frequência/pausa para exibir bonito no card
+            let freqTexto = `Toda ${nomeDia} às ${ce.hora}`;
+            if (ce.frequencia === 'alternado') {
+                freqTexto = `Quinzenal (${nomeDia}) às ${ce.hora}`;
+            } else if (ce.frequencia === 'pausa') {
+                freqTexto = `A cada ${(ce.pausa || 1) + 1} semanas (${nomeDia}) às ${ce.hora}`;
+            }
+
+            const validadeTexto = ce.tipoFim === 'infinita' ? 'Infinito' : `Até ${ce.dataFim ? ce.dataFim.split('-').reverse().join('/') : '---'}`;
             const estaAtivo = ce.hasOwnProperty('ativo') ? ce.ativo : true;
 
             const corBorda = estaAtivo ? 'var(--accent)' : '#555';
-            const textoStatus = estaAtivo ? '<span style="color:var(--success); font-weight:bold;">• ATIVO</span>' : '<span style="color:#888; font-weight:bold;">• DESATIVADO (Horário Livre)</span>';
+            const textoStatus = estaAtivo ? '<span style="color:var(--success); font-weight:bold;">• ATIVO</span>' : '<span style="color:#888; font-weight:bold;">• DESATIVADO</span>';
             const textoBotaoAtivo = estaAtivo ? 'Desativar' : 'Ativar';
             const corBotaoAtivo = estaAtivo ? '#856404' : '#155724'; 
 
             return `
-                <div class="item-list" style="background: #1a1a1a; padding: 12px; border-radius: 8px; border-left: 4px solid ${corBorda}; display: flex; justify-content: space-between; align-items: center; opacity: ${estaAtivo ? '1' : '0.7'};">
-                    <div>
-                        <strong style="color: white; font-size: 14px;">⭐ ${ce.nome}</strong> ${textoStatus}<br>
-                        <small style="color: ${estaAtivo ? 'var(--accent)' : '#888'}; font-weight: bold;">📅 Toda ${nomeDia} às ${ce.hora}</small><br>
-                        <small style="color: #888; font-size: 11px;">Barbeiro: ${ce.prestador} | Validade: ${validadeTexto}</small>
+                <div class="item-list" style="background: #1a1a1a; padding: 14px; border-radius: 10px; border-left: 4px solid ${corBorda}; display: flex; flex-direction: column; gap: 12px; opacity: ${estaAtivo ? '1' : '0.7'}; margin-bottom: 4px;">
+                    
+                    <!-- PARTE SUPERIOR: Informações do Cliente -->
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong style="color: white; font-size: 15px;">⭐ ${ce.nome}</strong>
+                            <span style="font-size: 11px;">${textoStatus}</span>
+                        </div>
+                        <span style="color: ${estaAtivo ? 'var(--accent)' : '#888'}; font-weight: bold; font-size: 13px;">📅 ${freqTexto}</span>
+                        <span style="color: #999; font-size: 11px;">Barbeiro: ${ce.prestador} | Validade: ${validadeTexto}</span>
                     </div>
-                    <div style="display:flex; gap:6px; align-items:center;">
-                        <button class="btn-small" style="background: ${corBotaoAtivo}; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer;" onclick="app.alternarStatusClienteEspecial(${ce.id})">${textoBotaoAtivo}</button>
-                        <button class="btn-small" style="background: #333; color: white; border: 1px solid #555; padding: 6px 10px; border-radius: 5px; cursor: pointer;" onclick="app.prepararEdicaoClienteEspecial(${ce.id})">✏️ Editar</button>
-                        <button class="btn-small" style="background: #b30000; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer;" onclick="app.excluirClienteEspecial(${ce.id})">Excluir</button>
+
+                    <!-- LINHA SEPARADORA SUTIL -->
+                    <div style="height: 1px; background: #333; width: 100%;"></div>
+
+                    <!-- PARTE INFERIOR: Botões de Ação (Distribuídos horizontalmente) -->
+                    <div style="display: flex; gap: 8px; width: 100%;">
+                        <button class="btn-small" style="flex: 1; background: ${corBotaoAtivo}; color: white; border: none; padding: 8px 6px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;" onclick="app.alternarStatusClienteEspecial(${ce.id})">${textoBotaoAtivo}</button>
+                        <button class="btn-small" style="flex: 1; background: #333; color: white; border: 1px solid #555; padding: 8px 6px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;" onclick="app.prepararEdicaoClienteEspecial(${ce.id})">✏️ Editar</button>
+                        <button class="btn-small" style="flex: 1; background: #b30000; color: white; border: none; padding: 8px 6px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;" onclick="app.excluirClienteEspecial(${ce.id})">Excluir</button>
                     </div>
+
                 </div>
             `;
         }).join('') || '<p style="text-align:center; padding:20px; color:#666">Nenhum cliente especial encontrado.</p>';
